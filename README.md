@@ -1,1 +1,1 @@
-# coyote_movement
+# coyote-movement
