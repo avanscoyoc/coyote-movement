@@ -18,9 +18,9 @@ library(raster) #for environmental covariates
 
 ### Import environmental rasters
 ```{r}
-raster_files <- list.files(here("data_covariates"), pattern = ".tif") 
-envtrasters <- raster::stack(paste0(here("data_covariates"), raster_files))
-names(envtrasters) <- c("dem", "max_ndvi", "slope", "tri")
+r <- list.files(path=here("data_covariates"), pattern='tif$', full.names=TRUE)
+envtrasters <- lapply(r, stack)
+names(envtrasters) <- c("elev", "lc", "road", "slope", "water")
 ```
 
 
@@ -35,6 +35,9 @@ data <- read_csv(here("data", "coyote_2021.12.01_2022.03.04.csv")) %>%
 
 head(data)
 ```
+
+
+
 ```{r}
 #make tracks for each animal id
 d <- data %>% 
@@ -48,6 +51,8 @@ d %>%
   mutate(sr = lapply(trk, summarize_sampling_rate)) %>% 
   dplyr::select(ID, sr) %>% unnest
 ```
+
+
 ```{r}
 #resample to 1hr
 ssfdat <- d %>% 
@@ -60,6 +65,7 @@ ssfdat <- d %>%
 ssfdat %>%
   mutate(sr = lapply(steps, summarize_sampling_rate)) %>% 
   dplyr::select(ID, sr) %>% unnest
+
 ```
 
 ```{r}
