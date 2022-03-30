@@ -1,0 +1,77 @@
+---
+title: "prep_covariates"
+author: "Amy Van Scoyoc"
+date: "3/30/2022"
+output: github_document
+---
+
+### Import Libraries
+```{r}
+library(here) #for setting working directory reproducibly
+library(tidyverse) #data tidying
+library(sf) #modifying spatial attributes 
+library(raster) #reclassify environmental covariates
+```
+
+### Import environmental layers
+
+```{r}
+r <- list.files(path=here("data_covariates"), pattern='tif$', full.names=TRUE)
+r <- lapply(r, stack)
+names(r) <- c("elev", "lc", "ndvi", "road", "slope", "water")
+```
+
+### Reclassify Land Cover
+
+```{r}
+#import landcover layer
+lc <- raster(here("data_covariates", "HREC_landcover_extended.tif"))
+freq(lc)
+
+#reclassify to developed (0), cultivated (1), and natural (2)
+reclass_vec <- c(0, 20, NA, # water will be set to NA 
+                20, 21, 1,  # we'll treat developed open space as cultivated (1s)
+                21, 30, 0,  # developed and hardscape set to 0s
+                30, 31, NA, # leave out barren
+                31, 80, 2,  # natural habitats will have 2s 
+                80, 89, 1,  # set cultivated space to 1s
+                89, Inf, NA)# wetlands set to NA 
+
+#create the matrix
+reclass_m <- matrix(reclass_vec, ncol = 3, byrow = TRUE)
+reclass_m
+
+#reclassify land cover values 
+lc_reclass <- reclassify(lc, reclass_m)
+freq(lc_reclass)
+plot(lc_reclass)
+```
+
+```{r}
+#import roads layer
+road <- raster(here("data_covariates", "HREC_roads_extended.tif"))
+freq(road)
+reclass_vec <- c(-1, 50, NA, #non road set to NA 
+                50, Inf, 1) #every road is 1 
+
+#create the matrix
+reclass_m <- matrix(reclass_vec, ncol = 3, byrow = TRUE)
+reclass_m
+
+#reclassify land cover values 
+rd_reclass <- reclassify(road, reclass_m)
+freq(rd_reclass)
+plot(rd_reclass)
+
+r_dist <- gridDistance(rd_reclass, origin = 1)
+plot(r_dist)
+```
+
+
+```{r}
+#make a distance to roads layer
+#make a distance to water layer
+#check elevation layer
+#figure out issue with NDVI layer
+```
+
