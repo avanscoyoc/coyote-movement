@@ -6,6 +6,67 @@ output: github_document
 ---
 
 ```{r}
-
+library(here)
+library(tidyverse)
+library(ggplot2)
+library(imager)
+library(sp)
+library(plyr)
+library(move)
+library(rgdal)
+library(lubridate)
+library(adehabitatLT)
+library(setRNG)
+library(momentuHMM)
 ```
+
+
+```{r}
+#import 2021-2022 data
+data <- read_csv(here("data","coyote_2021.12.01_2022.03.04.csv")) %>% 
+  drop_na(`Longitude[deg]`) %>% #remove any empty locations
+  dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, #select & rename columns
+                time = `Acq. Time [UTC]`, ID = `Collar ID`) %>% 
+  mutate(time = lubridate::with_tz(ymd_hms(time, tz="UTC"), tzone = "America/Los_Angeles"))
+
+head(data)
+```
+
+```{r}
+#get single ID
+rawData <- subset(data,ID==unique(ID)[1])
+#transform to sp object
+llcoord <- SpatialPoints(rawData[,1:2],
+                         proj4string=CRS("+proj=longlat +datum=WGS84"))
+#transform to utms
+utmcoord <- spTransform(llcoord,CRS("+init=epsg:26910"))
+# add UTM locations to data frame
+rawData$x <- attr(utmcoord,"coords")[,1]
+rawData$y <- attr(utmcoord,"coords")[,2]
+```
+```{r}
+#get percent of missing locations
+int_missing <- interval("2021-12-08", "2022-03-04") #define an interval for this period
+miss_period <- rawData[rawData$timestamp %within% int_missing,] #subset rawData to times in this period
+no_days <- as.numeric(as.Date("2022-03-04")-as.Date("2021-12-08")) #get the number of days
+
+length(miss_period$timestamp)/(no_days*24) #2% of data is missing
+```
+
+```{r}
+# fit crawl model
+crwOut <- crawlWrap(obsData=rawData, timeStep="hour",
+                    theta=c(6.855, -0.007), fixPar=c(NA,NA))
+plot(crwOut)
+
+# create momentuHMMData object from crwData object, taking one of the calculated tracks
+data <- prepData(data=crwOut, covNames="temp")
+
+# add cosinor covariate based on hour of day
+data$hour <- as.integer(strftime(data$timestamp, format = "%H", tz="GMT"))
+
+# Let's look for any periodicity in the data, in this next step, we will calculate the Autocorrelation Function
+acf(data$step[!is.na(data$step)],lag.max=300)
+```
+
 
