@@ -13,20 +13,12 @@ library(sf) #modifying spatial attributes
 library(raster) #reclassify environmental covariates
 ```
 
-### Import environmental layers
-
-```{r}
-r <- list.files(path=here("data_covariates"), pattern='tif$', full.names=TRUE)
-r <- lapply(r, stack)
-names(r) <- c("elev", "lc", "ndvi", "road", "slope", "water")
-```
-
 ### Reclassify Land Cover
 
 ```{r}
 #import landcover layer
 lc <- raster(here("data_covariates", "HREC_landcover_extended.tif"))
-freq(lc)
+#freq(lc)
 
 #reclassify to developed (0), cultivated (1), and natural (2)
 reclass_vec <- c(0, 20, NA, # water will be set to NA 
@@ -39,39 +31,76 @@ reclass_vec <- c(0, 20, NA, # water will be set to NA
 
 #create the matrix
 reclass_m <- matrix(reclass_vec, ncol = 3, byrow = TRUE)
-reclass_m
 
 #reclassify land cover values 
 lc_reclass <- reclassify(lc, reclass_m)
-freq(lc_reclass)
-plot(lc_reclass)
+#freq(lc_reclass)
+#plot(lc_reclass)
+
+#write to file
+writeRaster(lc_reclass, 
+            filename = here("data_covariates",
+                            "HREC_landcover_reclass.tif"), 
+            format = "GTiff",
+            overwrite = T)
 ```
+
+
+### Reclassify Roads
 
 ```{r}
 #import roads layer
 road <- raster(here("data_covariates", "HREC_roads_extended.tif"))
-freq(road)
-reclass_vec <- c(-1, 50, NA, #non road set to NA 
-                50, Inf, 1) #every road is 1 
+
+#reclassify to roads and NAs
+reclass_vec <- c(-1, 50, NA, #non-road set to NA 
+                50, Inf, 1) #all roads set to 1 
 
 #create the matrix
 reclass_m <- matrix(reclass_vec, ncol = 3, byrow = TRUE)
-reclass_m
 
-#reclassify land cover values 
+#reclassify road values 
 rd_reclass <- reclassify(road, reclass_m)
-freq(rd_reclass)
-plot(rd_reclass)
 
+#create distance surface (meters)
 r_dist <- gridDistance(rd_reclass, origin = 1)
-plot(r_dist)
+#plot(r_dist)
+
+#write to file
+writeRaster(r_dist, 
+            filename = here("data_covariates",
+                            "HREC_roads_reclass.tif"), 
+            format = "GTiff",
+            overwrite = T)
 ```
 
+### Reclassify Water
 
 ```{r}
-#make a distance to roads layer
-#make a distance to water layer
-#check elevation layer
-#figure out issue with NDVI layer
+#import water layer
+water <- raster(here("data_covariates", "HREC_water_extended.tif"))
+
+#reclassify to water and NAs
+reclass_vec <- c(-1, 0, NA, #non-water set to NA 
+                0, Inf, 1) #all water set to 1 
+
+#create the matrix
+reclass_m <- matrix(reclass_vec, ncol = 3, byrow = TRUE)
+
+#reclassify water values 
+w_reclass <- reclassify(water, reclass_m)
+
+#create distance surface (meters)
+w_dist <- gridDistance(w_reclass, origin = 1)
+#plot(w_dist)
+
+#write to file
+writeRaster(w_dist, 
+            filename = here("data_covariates",
+                            "HREC_water_reclass.tif"), 
+            format = "GTiff",
+            overwrite = T)
 ```
+
+
 
