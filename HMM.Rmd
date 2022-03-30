@@ -23,7 +23,7 @@ library(momentuHMM)
 
 ```{r}
 #import 2021-2022 data
-data <- read_csv(here("data","coyote_2021.12.01_2022.03.04.csv")) %>% 
+data <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_2021.12.01_2022.03.04.csv") %>% 
   drop_na(`Longitude[deg]`) %>% #remove any empty locations
   dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, #select & rename columns
                 time = `Acq. Time [UTC]`, ID = `Collar ID`) %>% 
