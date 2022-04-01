@@ -33,6 +33,9 @@ head(data)
 ```
 
 ```{r}
+#for single individual
+data <- subset(data,ID==unique(ID)[1])
+
 #transform to sp object
 llcoord <- SpatialPoints(data[,3:4],proj4string=CRS("+init=epsg:4326"))
 #transform to utms
@@ -54,8 +57,11 @@ data$y <- attr(utmcoord,"coords")[,2]
 ```
 
 ```{r}
+set.seed(12345)
+
 # fit crawl model
-crwOut <- crawlWrap(obsData=data, timeStep="hour",ncores = 3, attempts = 10, retryFits = 50)
+crwOut <- crawlWrap(obsData=data, timeStep="hour",theta=c(6.855, -0.007), 
+                    fixPar=c(NA,NA), attempts = 10, retryFits = 50)
 plot(crwOut)
 
 # create momentuHMMData object from crwData object, taking one of the calculated tracks
@@ -74,9 +80,6 @@ acf(data$step[!is.na(data$step)],lag.max=300)
 stateNames <- c("resting","meandering", "traveling")
 
 dist = list(step = "gamma", angle = "wrpcauchy")
-
-#To get some good starting values, let's look at our data
-plot(data) 
 
 # initial parameters 
 Par0_m1 <- list(step=c(100, #mean resting (0.06mph)
@@ -120,5 +123,8 @@ plot(m2)
 ```{r}
 #reconstruct the most probable state sequence, add as label
 data$State <- stateNames[viterbi(m2)]
+
+#write data for issf
+#write_csv(data, "data/coyote_3576_hmm.csv")
 ```
 

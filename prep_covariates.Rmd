@@ -17,7 +17,7 @@ library(raster) #reclassify environmental covariates
 
 ```{r}
 #import landcover layer
-lc <- raster(here("data_covariates", "HREC_landcover_extended.tif"))
+lc <- raster("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data_covariates/HREC_landcover_extended.tif")
 #freq(lc)
 
 #reclassify to developed (0), cultivated (1), and natural (2)
@@ -39,8 +39,7 @@ lc_reclass <- reclassify(lc, reclass_m)
 
 #write to file
 writeRaster(lc_reclass, 
-            filename = here("data_covariates",
-                            "HREC_landcover_reclass.tif"), 
+            filename = "/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data_covariates/HREC_landcover_reclass.tif", 
             format = "GTiff",
             overwrite = T)
 ```
