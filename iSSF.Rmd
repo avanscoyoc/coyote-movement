@@ -27,14 +27,10 @@ names(envtrasters) <- c("elev", "lc", "ndvi", "road", "slope", "water")
 ### Import coyote dataset
 ```{r}
 #import 2021-2022 data
-data <- read_csv(here("data", "coyote_2021.12.01_2022.03.04.csv")) %>% 
-  drop_na(`Longitude[deg]`) %>% #remove any empty locations
-  dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, #select & rename columns
-                timestamp = `Acq. Time [UTC]`, ID = `Collar ID`) %>% 
-  mutate(timestamp = lubridate::with_tz(ymd_hms(timestamp, tz="UTC"), tzone = "America/Los_Angeles")) %>% 
-  nest(-ID) #group by collar ID
-
-head(data)
+data <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_3576_hmm.csv") %>% 
+  drop_na(x) %>% #remove any empty locations
+  dplyr::select(x, y, time, ID, State) %>% 
+  nest(-State)
 ```
 
 
@@ -43,14 +39,13 @@ head(data)
 #make tracks for each animal id
 d <- data %>% 
   mutate(trk = map(data, function(d){
-    mk_track(d, x, y, timestamp, crs = CRS("+init=epsg:4326")) %>% #from WGS84
-      transform_coords(CRS("+init=epsg:26910")) #transform to NAD83 UTM zone 10N
+    mk_track(d, x, y, time, crs = CRS("+init=epsg:26910"))
   }))
 
 #check sampling rate is 1hr
 d %>% 
   mutate(sr = lapply(trk, summarize_sampling_rate)) %>% 
-  dplyr::select(ID, sr) %>% unnest
+  dplyr::select(State, sr) %>% unnest
 ```
 
 
@@ -59,18 +54,22 @@ d %>%
 ssfdat <- d %>% 
   mutate(steps = map(trk, function(x){
     x %>% 
-      track_resample(rate = hours(1), tolerance = minutes(5)) %>% #eliminate steps >1 hour
+      track_resample(rate = hours(1), tolerance = minutes(10)) %>% #eliminate steps >1 hour
       filter_min_n_burst(min_n = 2)})) #eliminate bursts with <2 points
 
 #compare
 ssfdat %>%
   mutate(sr = lapply(steps, summarize_sampling_rate)) %>% 
-  dplyr::select(ID, sr) %>% unnest
+  dplyr::select(State, sr) %>% unnest
 ```
 
 ```{r}
-lc <- raster(here("data_covariates", "HREC_landcover_reclass.tif"))
+lc <- raster("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data_covariates/HREC_landcover_reclass.tif")
 names(lc) <- "lc"
+#reproject
+lc <- projectRaster(lc, projectExtent(lc, crs = CRS("+proj=utm +zone=10 +datum=NAD83 +units=m +no_defs")),
+                    method = 'ngb')
+plot(lc)
 
 ssfdat <- ssfdat %>%
   mutate(moddata = map(steps, function(x){
@@ -79,25 +78,24 @@ ssfdat <- ssfdat %>%
       # Randomly sample 10 steps per real step
       random_steps(n = 10) %>% 
       # Determine day or night from movement track data
-      time_of_day(where = "start", include.crepuscule = TRUE) %>% 
+      time_of_day(where = "start") %>% 
       # Extract covariates from our raster stack
       amt::extract_covariates(lc,where="both")}))
-
 ```
 
 ```{r}
 #scale covariates across all IDs
 ssfdat.all <- do.call(rbind,ssfdat$moddata)
-ID<-c()
+State<-c()
 for (i in 1:length(ssfdat[[1]])) {
-   id <- rep(ssfdat[[i,1]],dim(ssfdat$moddata[[i]])[1])
-   ID<-c(ID,id)
+   state <- rep(ssfdat[[i,1]],dim(ssfdat$moddata[[i]])[1])
+   State<-c(State,state)
 }
-ssfdat.all$ID <- ID
+ssfdat.all$State <- State
 ssfdat.all 
 
 #create new step column
-ssfdat.all$stepID <- ssfdat.all$ID*100000 + ssfdat.all$step_id_
+ssfdat.all$stepState <- ssfdat.all$State*100000 + ssfdat.all$step_id_
 
 ```
 
@@ -148,5 +146,17 @@ ssfdat.all %>%
   filter(step_id_ == 2, ID == 35076) %>% 
   ggplot(.) + geom_point(aes(x = x2_,y = y2_,color = as.factor(case_))) + 
   geom_point(aes(x = x1_, y = y1_))
+```
+
+```{r}
+ssfdat.all %>% 
+  mutate(year = year(t1_)) %>% 
+  unite("clust_id_yr",c(ID,year),remove = FALSE) -> ssfdat.all
+table(ssfdat.all$clust_id_yr)
+
+#
+library(coxme)
+m0_me<-coxme(Surv(rep(1, length(ssfdat.all$ID)), case_) ~ lc_end + strata(stepID) + (1|State),
+               data = ssfdat.all, na.action = na.fail)
 ```
 

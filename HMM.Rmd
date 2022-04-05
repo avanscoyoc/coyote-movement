@@ -38,6 +38,7 @@ data <- subset(data,ID==unique(ID)[1])
 
 #transform to sp object
 llcoord <- SpatialPoints(data[,3:4],proj4string=CRS("+init=epsg:4326"))
+
 #transform to utms
 utmcoord <- spTransform(llcoord,CRS("+init=epsg:26910"))
 # add UTM locations to data frame
@@ -123,7 +124,7 @@ plot(m2)
 ```{r}
 #reconstruct the most probable state sequence, add as label
 data$State <- stateNames[viterbi(m2)]
-
+View(data)
 #write data for issf
 #write_csv(data, "data/coyote_3576_hmm.csv")
 ```

@@ -1,0 +1,120 @@
+---
+title: "iSSF_control"
+author: "Amy Van Scoyoc"
+date: "4/3/2022"
+output: github_document
+---
+
+### Load Libraries
+```{r}
+library(here) #for setting working directory reproducibly
+library(tidyverse) #for data manipulation
+library(amt) #for animal movement tools (iSSF) 
+library(sp) #for setting coordinate reference systems
+library(lubridate) #for date/time adjustments
+library(raster) #for environmental covariates
+```
+
+### Import coyote dataset
+```{r}
+# #import 2021-2022 data
+season1 <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_2020.11.08_2021.06.30.csv") %>%
+  dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, 
+                t = `Acq. Time [UTC]`, ID = `Collar ID`) %>%
+  mutate(t = lubridate::with_tz(ymd_hms(t,tz="UTC"),"America/Los_Angeles")) %>% 
+  drop_na(x) %>% #remove any empty locations
+  nest(-ID) %>% arrange(ID) %>% 
+  mutate(ID = c("C4","C3","C1","C2"), 
+         sex = c("m","m","f","f"))
+
+#import 2021-2022 data
+season2 <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_2021.12.01_2022.03.04.csv") %>% 
+  dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, 
+                t = `Acq. Time [UTC]`, ID = `Collar ID`) %>% 
+  mutate(t = lubridate::with_tz(ymd_hms(t,tz="UTC"),"America/Los_Angeles")) %>% 
+  drop_na(x) %>% #remove any empty locations
+  nest(-ID) %>% arrange(ID) %>% 
+  mutate(ID = c("C5","C6","C7","C8","C9"), 
+         sex = c("m","m","f","m","f"))
+
+#combine datasets
+dat_all <- rbind(season1, season2)
+```
+
+### Create tracks
+```{r}
+dat_all <- dat_all %>% 
+  mutate(trk = map(data, function(d){
+    mk_track(d, x, y, t, crs = CRS("+init=epsg:4326")) %>% 
+      # Transform our latlongs into UTMs
+      transform_coords(CRS("+init=epsg:26910"))
+  }))
+```
+
+### Check sampling rate
+```{r}
+dat_all %>%
+  mutate(sr = lapply(trk, summarize_sampling_rate)) %>% 
+  dplyr::select(ID, sr) %>% unnest
+```
+
+### Land cover covariate
+```{r}
+lu <- raster("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data_covariates/HREC_landcover_reclass.tif")
+names(lu) <- "landuse"
+#reproject
+lu <- projectRaster(lu, projectExtent(lu, crs = CRS("+proj=utm +zone=10 +datum=NAD83 +units=m +no_defs")),
+                    method = 'ngb')
+plot(lu)
+```
+
+### Land use model
+```{r}
+m1 <- dat_all %>%
+mutate(steps = map(trk, function(x) {
+        x %>% amt::track_resample(rate = hours(1), tolerance = minutes(5)) %>%
+        amt::filter_min_n_burst() %>%
+        amt::steps_by_burst() %>% amt::random_steps() %>%
+        amt::extract_covariates(lu, where = "both") %>%
+        mutate(landuse_end = factor(landuse_end))
+        }))
+
+m1 <- m1 %>% 
+  mutate(fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end + strata(step_id_))))
+
+d2 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, sex, coef) %>% unnest %>%
+      mutate(ID = factor(ID)) %>% group_by(term) %>%
+      summarize(mean = mean(estimate),
+                ymin = mean - 1.96 * sd(estimate),
+                ymax = mean + 1.96 * sd(estimate))
+
+d2$x <- 1:nrow(d2)
+```
+
+
+### Plot
+```{r}
+p1 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, sex, coef) %>% unnest %>% 
+      filter(ID != 'C5') %>% 
+      mutate(ID = factor(ID), 
+             conf.low = estimate - std.error,
+             conf.high = estimate + std.error) %>%
+      ggplot(., aes(x = term, y = estimate, group = ID, col = ID, pch = sex)) +
+        geom_rect(mapping = aes(xmin = x - .4, xmax = x + .4, 
+                                  ymin = ymin,ymax = ymax), 
+                    data = d2, inherit.aes = FALSE, fill = "grey90") +
+        geom_segment(mapping = aes(x = x - .4, xend = x + .4,
+                                   y = mean, yend = mean), 
+                     data = d2, inherit.aes = FALSE, size = 1) +
+        geom_pointrange(aes(ymin = conf.low, ymax = conf.high),
+                        position = position_dodge(width = 0.7), size = 0.8) +
+        geom_hline(yintercept = 0, lty = 2) +
+        labs(x = "Habitat", y = "Relative Selection Strength") +
+        theme_light() +
+        scale_x_discrete(labels = c("Developed (open)", "Natural")) 
+
+p1
+```
+
