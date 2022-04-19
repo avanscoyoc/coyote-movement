@@ -1,0 +1,280 @@
+---
+title: "RSFs"
+author: "Amy Van Scoyoc"
+date: "4/14/2022"
+output: github_document
+---
+
+```{r}
+library(here) #reproducible working directory
+library(tidyverse) #data wrangling
+library(lubridate) #setting timezone
+library(maptools) #setting day/night times
+library(sp) #for spatial points
+library(sf) #for spatial transformations with pipes
+library(adehabitatHR) #for calculating homerange KUDs
+library(raster) #for importing and extracting covariates
+library(lme4) #for glmer models
+library(AICcmodavg) #for checking aictab
+library(AUC)  #ROC curves
+library(ROCR) #ROC curves
+library(sjPlot) #table of RSF covariates
+library(jtools) #plot all model estimates together
+```
+
+### Load coyote data with HMM states, add day/night
+```{r}
+#import dataset
+coyote <- read_csv(here("data", "hmm_dat.csv"))
+#transform to geographic crs for sunriset
+coordinates(coyote) <- c("x", "y")
+proj4string(coyote) <- CRS("+init=epsg:26910")
+coyote <- spTransform(coyote, CRS("+init=epsg:4326")) %>% as.data.frame() 
+#add sunriset times
+coyote <- coyote %>% 
+  mutate(t = force_tz(t,tz = "America/Los_Angeles"), #declare timezone
+         sunrise = sunriset(SpatialPoints(cbind(x,y),proj4string=CRS("+init=epsg:4326")), 
+                                      t, direction="sunrise", POSIXct.out=TRUE)[,2],
+         sunset = sunriset(SpatialPoints(cbind(x,y),proj4string=CRS("+init=epsg:4326")), 
+                                      t, direction="sunset", POSIXct.out=TRUE)[,2],
+         daynight = ifelse(t > sunrise & t < sunset, 1, 0)) %>% #assign tags, 1=day, 0=night 
+  dplyr::select(ID, x, y, t, states, daynight)
+```
+
+
+### Calculate Home Ranges (Kernel Utilization Distribution)
+```{r}
+#create object for calculating HRs
+coyote_sp <- coyote %>% 
+   dplyr::select(ID,x,y) %>% #select data 
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910") %>% #transform back to UTMs
+   as("Spatial") #transform back to sp object for KUDs
+
+#create Kernel Utilization Distributions 
+kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
+coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95 , unout = "km2")
+
+#plot
+plot(coyote_hr, col = coyote_hr$ID)
+
+#HR area (km2)
+kernel.area(kud_all, percent = 95) %>% 
+  pivot_longer(1:8,names_to = "ID", values_to = "Area (km^2)")
+```
+
+
+### Sample available points in Home Ranges
+```{r}
+coyote <- coyote %>% mutate(Used = 1) %>% #add column to indicate used points
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910")  #transform back to UTMs
+
+coyote_ids <- unique(coyote$ID) # Extract a list of IDs
+availables <- list() #empty list to store available pts by ID
+
+# Randomly sample available points from within the home range of each individual
+for(i in 1:length(coyote_ids)){
+    st_sample(st_as_sf(coyote_hr)[i,], 5*nrow(filter(coyote, ID == coyote_ids[i]))) %>%  #5:1 ratio
+    st_sf(geometry = .) %>%
+    mutate(ID = coyote_ids[i], 
+           t = NA,
+           states = NA,
+           daynight = NA,
+           Used = 0) -> availables[[i]]  
+}
+
+# Then combine individual lists into one data.frame
+# Then merge with used coyote GPS points data frame
+coyote_all <- availables %>% 
+  do.call(rbind,.) %>% 
+  rbind(coyote, .)
+
+# Check that we have a 5:1 ratio of used:available points
+table(coyote_all$ID,coyote_all$Used)
+
+#check
+# plot(coyote_hr[8,])
+# plot(st_geometry(filter(coyote_all,ID == "M5",Used == 0)),col="red",add=T)
+# plot(st_geometry(filter(coyote_all,ID == "M5",Used == 1)),add=T)
+```
+
+
+### Import covariates
+```{r}
+load(here("data_objects","envt.Rdata"))
+plot(envt)
+```
+
+### Scale and append covariates
+```{r}
+#append and scale covariates
+coyote_full <- coyote_all %>% 
+  mutate(lion = raster::extract(envt[[1]], as(., "Spatial")),
+         hunter = raster::extract(envt[[2]], as(., "Spatial")),
+         humans = raster::extract(envt[[3]], as(., "Spatial")),
+         livestock = raster::extract(envt[[4]], as(., "Spatial")),
+         crop = raster::extract(envt[[5]], as(., "Spatial")),
+         habitat = raster::extract(envt[[6]], as(., "Spatial")),
+         #scale covariates
+         lion.scaled = scale(lion, center = TRUE, scale = TRUE),
+         hunter.scaled = scale(hunter, center = TRUE, scale = TRUE),
+         humans.scaled = scale(humans, center = TRUE, scale = TRUE),
+         livestock.scaled = scale(livestock, center = TRUE, scale = TRUE),
+         crop.scaled = scale(crop, center = TRUE, scale = TRUE),
+         habitat.scaled = scale(habitat, center = TRUE, scale = TRUE),)
+
+# Save your scale parameters - you'll need them for plotting later!
+lion_scalelist <- list(scale = attr(coyote_full$lion.scaled, "scaled:scale"),
+                     center = attr(coyote_full$lion.scaled, "scaled:center"))
+hunter_scalelist <- list(scale = attr(coyote_full$hunter.scaled, "scaled:scale"),
+                    center = attr(coyote_full$hunter.scaled, "scaled:center"))
+humans_scalelist <- list(scale = attr(coyote_full$humans.scaled, "scaled:scale"),
+                     center = attr(coyote_full$humans.scaled, "scaled:center"))
+livestock_scalelist <- list(scale = attr(coyote_full$livestock.scaled, "scaled:scale"),
+                        center = attr(coyote_full$livestock.scaled, "scaled:center"))
+crop_scalelist <- list(scale = attr(coyote_full$crop.scaled, "scaled:scale"),
+                        center = attr(coyote_full$crop.scaled, "scaled:center"))
+habitat_scalelist <- list(scale = attr(coyote_full$habitat.scaled, "scaled:scale"),
+                        center = attr(coyote_full$habitat.scaled, "scaled:center"))
+```
+
+
+### Check covariates for colinearity
+```{r}
+coyote_full$ID <- as_factor(coyote_full$ID) #make sure ID is treated as a factor
+
+coyote_cor <- coyote_full
+st_geometry(coyote_cor) <- NULL
+cor(coyote_cor[,c("lion.scaled","hunter.scaled","humans.scaled",
+                  "livestock.scaled", "crop.scaled", "habitat.scaled")])
+#No covariates were >0.7, kept all
+```
+
+
+### Fit individual RSFs
+```{r}
+lion <- glmer(Used ~ lion.scaled + (1|ID), 
+              data=coyote_full, family=binomial(link="logit"))
+
+hunter <- glmer(Used ~ hunter.scaled + (1|ID), 
+                data=coyote_full, family=binomial(link="logit"))
+
+humans <- glmer(Used ~ humans.scaled + (1|ID), 
+                 data=coyote_full, family=binomial(link="logit"))
+
+livestock <- glmer(Used ~ livestock.scaled + (1|ID), 
+                           data=coyote_full, family=binomial(link="logit"))
+
+crop <- glmer(Used ~ crop.scaled + (1|ID), 
+                 data=coyote_full, family=binomial(link="logit"))
+
+habitat <- glmer(Used ~ habitat.scaled + (1|ID), 
+                 data=coyote_full, family=binomial(link="logit"))
+
+# Make a list of your models and compare the deltaAIC, log likelihood, and akaike weights
+cand.models <- c(lion, hunter, humans, livestock, crop, habitat)
+print(indv_mods <- data.frame(aictab(cand.models)))
+```
+
+### Check combined model for weights
+```{r}
+combined <- glmer(Used ~ lion.scaled + hunter.scaled + humans.scaled + 
+                        livestock.scaled + crop.scaled + habitat.scaled + (1|ID), 
+                 data=coyote_full, family=binomial(link="logit"))
+summary(combined)
+
+sjPlot::plot_model(combined, type = "slope") 
+sjPlot::plot_model(combined, type = "re")
+```
+
+
+### Fit individual RSFs by behavior
+```{r}
+rest_mod <- glmer(Used ~ lion.scaled + hunter.scaled + humans.scaled + 
+                        livestock.scaled + crop.scaled + habitat.scaled + (1|ID), 
+                 data = filter(coyote_full, is.na(states)|states==1), 
+                 family = binomial(link="logit"))
+
+forage_mod <- glmer(Used ~ lion.scaled + hunter.scaled + humans.scaled + 
+                        livestock.scaled + crop.scaled + habitat.scaled + (1|ID), 
+                 data = filter(coyote_full, is.na(states)|states==2), 
+                 family = binomial(link="logit"))
+
+travel_mod <- glmer(Used ~ lion.scaled + hunter.scaled + humans.scaled + 
+                        livestock.scaled + crop.scaled + habitat.scaled + (1|ID), 
+                 data = filter(coyote_full, is.na(states)|states==3), 
+                 family = binomial(link="logit"))
+
+sjPlot::plot_model(rest_mod, type = "slope") 
+sjPlot::plot_model(forage_mod, type = "slope") 
+sjPlot::plot_model(travel_mod, type = "slope") 
+```
+```{r}
+sjPlot::tab_model(combined, rest_mod, forage_mod, travel_mod, 
+          dv.labels = c("Combined","Resting","Foraging","Traveling"),
+          pred.labels = c("Intercept", "Lion risk", "Hunter risk","Human presence", 
+                          "Distance to Livestock", "Distance to Cropland", "Habitat"),
+          show.re.var = FALSE, show.ngroups = FALSE, show.icc = FALSE,
+          string.pred = "Covariates", string.ci = "CI", p.style = "stars")
+
+jtools::plot_summs(combined, rest_mod, forage_mod, travel_mod, scale = TRUE, 
+           model.names = c("Combined", "Resting", "Foraging", "Traveling"),
+           coefs = c("Lion risk"="lion.scaled", 
+                     "Hunter risk"="hunter.scaled", 
+                     "Human presence"="humans.scaled", 
+                     "Distance to Livestock"="livestock.scaled",
+                     "Distance to Cropland"="crop.scaled", 
+                     "Habitat"="habitat.scaled"), 
+           colors = c("black","orange","blue2","seagreen")) 
+```
+
+
+
+### Create Prediction Map 
+
+```{r}
+# Time to make a predicted raster layer based on your model!
+
+envtrasters[[1]]<-(envtrasters[[1]]-hf_scalelist$center)/hf_scalelist$scale
+envtrasters[[2]]<-(envtrasters[[2]]-r_scalelist$center)/r_scalelist$scale
+envtrasters[[3]]<-(envtrasters[[3]]-lc_scalelist$center)/lc_scalelist$scale
+envtrasters[[4]]<-(envtrasters[[4]]-slope_scalelist$center)/slope_scalelist$scale
+names(envtrasters) <- c("hf_dist.scaled", "r_dist.scaled", "lc.scaled", "slope.scaled")
+
+
+predictionmap<-raster::predict(object=envtrasters,model=combined,
+                               re.form = NA,type="response") #response means its a logistic regression
+
+# To visualize the differences among individuals, let's also map the individuals with the 
+#   greatest deviations from the model intercept
+ranef(combined)
+predictionmap.2<-raster::predict(object=envtrasters,model=combined,
+                               const=(data.frame(ID="F1")),type="response")
+predictionmap.3<-raster::predict(object=envtrasters,model=combined,
+                               const=(data.frame(ID="M2")),type="response")
+
+# Visualization 1 in base::plot
+plot(predictionmap)
+plot(predictionmap.2)
+plot(predictionmap.3)
+```
+
+
+### Fit individual RSF by day/night
+```{r}
+
+```
+
+
+### Visualizations 
+```{r}
+
+```
+
+
+### Cross Validation 
+```{r}
+
+```
+

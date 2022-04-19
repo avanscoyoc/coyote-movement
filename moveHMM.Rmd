@@ -1,0 +1,116 @@
+---
+title: "moveHMM"
+author: "Amy Van Scoyoc"
+date: "4/5/2022"
+output: github_document
+---
+
+```{r}
+library(here) #reproducible working directory
+library(moveHMM) #package to make HMMs
+library(parallel) #package for parallel computations
+```
+
+### Import coyote dataset
+```{r}
+load(here("data_objects","dat_all.Rdata"))
+```
+
+### Process coyote data for HMM
+```{r}
+dat_processed <- prepData(dat_all, type="UTM")
+plot(dat_processed, ask=F)
+```
+
+### Get zeromass parameters
+```{r}
+# Indices of steps of length zero
+whichzero <- which(dat_processed$step == 0)
+# Proportion of steps of length zero in the data set
+length(whichzero)/nrow(dat_processed)
+```
+
+### Iterate to fit parameters (in parallel)
+```{r}
+#set seed for reproducibility
+set.seed(12345)
+# Create cluster of size ncores
+ncores <- detectCores() - 1
+#cl <- makeCluster(getOption("cl.cores", ncores)) #this wasn't working
+cl <- parallel::makeCluster(2, setup_strategy = "sequential") #found this solution instead
+
+# Export objects needed in parallelised function to cluster 
+clusterExport(cl, list("dat_processed", "fitHMM"))
+
+# Number of tries with different starting values
+niter <- 25
+
+# Create list of starting values
+allPar0 <- lapply(as.list(1:niter), function(x) { 
+    # Step length mean
+    stepMean0 <- runif(3,
+                    min = c(50, 500, 1000), 
+                    max = c(100, 1000, 3000))
+    # Step length standard deviation
+    stepSD0 <- runif(3,
+                     min = c(25, 250, 500),
+                     max = c(50, 500, 1500)) 
+    # Zero mass parameters 
+    zeromass <- c(0.0005458941,0.0005458941,0.0005458941)
+    # Turning angle mean
+    angleMean0 <- c(pi, pi/2, 0)
+    # Turning angle concentration
+    angleCon0 <- runif(3,
+                       min = c(0.2, 0.5, 0.7),
+                       max = c(0.5, 0.7, 3))
+    # Return vectors of starting values
+    stepPar0 <- c(stepMean0, stepSD0, zeromass)
+    anglePar0 <- c(angleMean0, angleCon0)
+    return(list(step = stepPar0, angle = anglePar0))
+})
+# Fit the niter models in parallel
+allm_parallel <- parLapply(cl = cl, X = allPar0, fun = function(par0) { 
+  m <- fitHMM(data = dat_processed, nbStates = 3, 
+              stepPar0 = par0$step,anglePar0 = par0$angle)
+  return(m) 
+  })
+```
+
+### Check the best fitting model
+```{r}
+# Extract likelihoods of fitted models
+allnllk <- unlist(lapply(allm_parallel, function(m) m$mod$minimum))
+allnllk
+```
+
+```{r}
+# Index of best fitting model (smallest negative log-likelihood)
+whichbest <- which.min(allnllk)
+# Best fitting model
+mbest <- allm_parallel[[whichbest]]
+mbest
+plot(mbest, ask=F)
+# Export as model data object
+save(mbest, file = "data_objects/best_hmm.Rdata")
+```
+
+```{r}
+# Assign the best model's states to the dataset 
+hmm_dat <- dat_processed
+hmm_dat$states <- viterbi(mbest)
+# Export as csv to partition by behavioral state
+write_csv(hmm_dat, "data/hmm_dat.csv")
+```
+
+```{r}
+hmm_dat <- read_csv("data/hmm_dat.csv")
+hmm_dat %>% group_by(states) %>% summarize(Observations = n())
+obs_table <- data_frame(c("Resting", "Foraging", "Traveling", "Combined"),
+                        c(4788,3641,3164,11593), 
+                        c(4788*5,3641*5,3164*5,11593*5))
+names(obs_table) <- c('Model', 'Observations', 'Available')
+
+tab_df(obs_table)
+
+```
+

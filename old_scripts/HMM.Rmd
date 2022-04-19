@@ -1,0 +1,131 @@
+---
+title: "HMM"
+author: "Amy Van Scoyoc"
+date: "3/30/2022"
+output: github_document
+---
+
+```{r}
+library(here)
+library(tidyverse)
+library(ggplot2)
+library(imager)
+library(sp)
+library(plyr)
+library(move)
+library(rgdal)
+library(lubridate)
+library(adehabitatLT)
+library(setRNG)
+library(momentuHMM)
+```
+
+
+```{r}
+#import 2021-2022 data
+data <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_2021.12.01_2022.03.04.csv") %>% 
+  drop_na(`Longitude[deg]`) %>% #remove any empty locations
+  dplyr::select(ID = `Collar ID`, time = `Acq. Time [UTC]`, #select & rename columns
+                x = `Longitude[deg]`, y = `Latitude[deg]`) %>%  
+  mutate(time = lubridate::with_tz(ymd_hms(time, tz="UTC"), tzone = "America/Los_Angeles"))
+
+head(data)
+```
+
+```{r}
+#for single individual
+data <- subset(data,ID==unique(ID)[1])
+
+#transform to sp object
+llcoord <- SpatialPoints(data[,3:4],proj4string=CRS("+init=epsg:4326"))
+
+#transform to utms
+utmcoord <- spTransform(llcoord,CRS("+init=epsg:26910"))
+# add UTM locations to data frame
+data$x <- attr(utmcoord,"coords")[,1]
+data$y <- attr(utmcoord,"coords")[,2]
+```
+
+
+
+```{r}
+#get percent of missing locations
+# int_missing <- interval("2021-12-08", "2022-03-04") #define an interval for this period
+# miss_period <- rawData[rawData$time %within% int_missing,] #subset rawData to times in this period
+# no_days <- as.numeric(as.Date("2022-03-04")-as.Date("2021-12-08")) #get the number of days
+# 
+# length(miss_period$time)/(no_days*24) #2% of data is missing
+```
+
+```{r}
+set.seed(12345)
+
+# fit crawl model
+crwOut <- crawlWrap(obsData=data, timeStep="hour",theta=c(6.855, -0.007), 
+                    fixPar=c(NA,NA), attempts = 10, retryFits = 50)
+plot(crwOut)
+
+# create momentuHMMData object from crwData object, taking one of the calculated tracks
+data <- prepData(data=crwOut)
+
+# add cosinor covariate based on hour of day
+data$hour <- as.integer(strftime(data$time, format = "%H", tz="America/Los_Angeles"))
+
+# Let's look for any periodicity in the data, in this next step, we will calculate the Autocorrelation Function
+acf(data$step[!is.na(data$step)],lag.max=300)
+```
+
+
+```{r}
+# label states
+stateNames <- c("resting","meandering", "traveling")
+
+dist = list(step = "gamma", angle = "wrpcauchy")
+
+# initial parameters 
+Par0_m1 <- list(step=c(100, #mean resting (0.06mph)
+                       1000,#mean meandering (1mph)
+                       3000,#mean traveling (2mph)
+                       100, #sd resting
+                       500, #sd meandering
+                       1000 #sd traveling
+                       ),
+                angle= c(0.2, 0.5, 0.7)) #angle concentration
+
+# We use fitHMM to fit the model
+m1 <- fitHMM(data = data, #the data
+             nbStates = 3, #number of states
+             dist = dist, #the distributions we are using for the data streams
+             Par0 = Par0_m1, #the initial values for the distributions
+             estAngleMean = list(angle=FALSE), #whether or not we want to calculate the angle mean
+             stateNames = stateNames) #labels for the states 
+plot(m1)
+```
+
+```{r}
+#add influence of time 
+formula <- ~ cosinor(hour, period = 24)
+# initial parameters (obtained from nested model m1)
+Par0_m2 <- getPar0(model=m1, formula=formula)
+#The parameters themselves are accessed within this object
+Par0_m2$Par
+```
+
+```{r}
+m2 <- fitHMM(data = data, 
+             nbStates = 3, 
+             dist = dist, 
+             Par0 = Par0_m2$Par,
+             stateNames = stateNames, 
+             formula=formula)
+plot(m2)
+```
+
+```{r}
+#reconstruct the most probable state sequence, add as label
+data$State <- stateNames[viterbi(m2)]
+View(data)
+#write data for issf
+#write_csv(data, "data/coyote_3576_hmm.csv")
+```
+

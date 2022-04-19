@@ -1,0 +1,69 @@
+---
+title: "HMM_full"
+author: "Amy Van Scoyoc"
+date: "4/4/2022"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(imager)
+library(sf)
+library(sp)
+library(plyr)
+library(move)
+library(rgdal)
+library(lubridate)
+library(adehabitatLT)
+library(setRNG)
+library(momentuHMM)
+```
+
+### Import coyote dataset
+```{r}
+# #import 2021-2022 data
+season1 <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_2020.11.08_2021.06.30.csv") %>%
+  dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, 
+                time = `Acq. Time [UTC]`, ID = `Collar ID`) %>%
+  mutate(time = lubridate::with_tz(ymd_hms(time,tz="UTC"),"America/Los_Angeles")) %>% 
+  drop_na(x) %>% #remove any empty locations
+  nest(-ID) %>% arrange(ID) %>% 
+  mutate(ID = c("C4","C3","C1","C2"))
+
+#import 2021-2022 data
+season2 <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data/coyote_2021.12.01_2022.03.04.csv") %>% 
+  dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, 
+                time = `Acq. Time [UTC]`, ID = `Collar ID`) %>% 
+  mutate(time = lubridate::with_tz(ymd_hms(time,tz="UTC"),"America/Los_Angeles")) %>% 
+  drop_na(x) %>% #remove any empty locations
+  nest(-ID) %>% arrange(ID) %>% 
+  mutate(ID = c("C5","C6","C7","C8","C9"))
+
+#combine field seasons
+dat_all <- rbind(season1, season2) %>% unnest
+```
+
+### Transform to UTMs
+```{r}
+#transform to sp object
+llcoord <- SpatialPoints(dat_all[,2:3],proj4string=CRS("+init=epsg:4326"))
+#transform to utms
+utmcoord <- spTransform(llcoord,CRS("+init=epsg:26910"))
+# add UTM locations to data frame
+dat_all$x <- attr(utmcoord,"coords")[,1]
+dat_all$y <- attr(utmcoord,"coords")[,2]
+```
+
+### 
+```{r}
+set.seed(12345)
+
+crwOut <- crawlWrap(dat_all, 
+                    timeStep = "hour", 
+                    theta=c(6.855, -0.007), 
+                    fixPar=c(NA,NA))
+
+dat_prep <- prepData(data=crwOut)
+```
+

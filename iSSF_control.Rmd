@@ -38,12 +38,13 @@ season2 <- read_csv("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/project
          sex = c("m","m","f","m","f"))
 
 #combine datasets
-dat_all <- rbind(season1, season2)
+dat_all <- rbind(season1, season2) %>% unnest %>% data.frame() %>% 
+  filter(month(t) %in% c(12,1,2,3))
 ```
 
 ### Create tracks
 ```{r}
-dat_all <- dat_all %>% 
+dat_all <- dat_all %>% nest(-ID, -sex) %>% 
   mutate(trk = map(data, function(d){
     mk_track(d, x, y, t, crs = CRS("+init=epsg:4326")) %>% 
       # Transform our latlongs into UTMs
@@ -62,9 +63,6 @@ dat_all %>%
 ```{r}
 lu <- raster("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data_covariates/HREC_landcover_reclass.tif")
 names(lu) <- "landuse"
-#reproject
-lu <- projectRaster(lu, projectExtent(lu, crs = CRS("+proj=utm +zone=10 +datum=NAD83 +units=m +no_defs")),
-                    method = 'ngb')
 plot(lu)
 ```
 
@@ -92,6 +90,25 @@ d2 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
 d2$x <- 1:nrow(d2)
 ```
 
+### Table 
+
+```{r}
+combined <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, sex, coef) %>% unnest %>%
+      filter(ID != "C5") %>% 
+      mutate(ID = factor(ID)) %>% group_by(term) %>%
+      summarize(Estimate = mean(estimate),
+                SE = mean(std.error)) %>% 
+      mutate(state = "Combined",
+             term = c("Cropland","Natural")) %>% 
+   pivot_wider(names_from=term, values_from=2:3) %>%
+   dplyr::select(1,2,4,3,5)
+
+colnames(combined) <- c("Behavioral State","Estimate (Cropland)","SE","Estimate (Natural)","SE2")
+
+write_csv(combined, "data/ssf_landuse_combined.csv")
+```
+
 
 ### Plot
 ```{r}
@@ -117,4 +134,6 @@ p1 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
 
 p1
 ```
+
+
 

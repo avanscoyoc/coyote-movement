@@ -1,0 +1,177 @@
+---
+title: "iSSF_behavior"
+author: "Amy Van Scoyoc"
+date: "4/6/2022"
+output: github_document
+---
+
+### Load Libraries
+```{r}
+library(here) #for setting working directory reproducibly
+library(tidyverse) #for data manipulation
+library(amt) #for animal movement tools (iSSF) 
+library(sp) #for setting coordinate reference systems
+library(lubridate) #for date/time adjustments
+library(raster) #for environmental covariates
+```
+
+
+### Land cover covariate
+```{r}
+lu <- raster("/Users/Amy/Documents/Berkeley Classes/Brashares Lab/projects/coyote-movement/data_covariates/HREC_landcover_reclass.tif")
+names(lu) <- "landuse"
+plot(lu)
+```
+
+
+### Import state data 
+```{r}
+dat_hmm <- read_csv("data/dat_final_hmm.csv") %>% filter(ID != "C5", ID != "C6")
+
+#traveling data
+dat_t <- dat_hmm %>% 
+  dplyr::select(ID, x, y, t = time, states) %>% 
+  filter(states == 3) %>% 
+  dplyr::select(ID, x, y, t)
+#meandering data
+dat_m <- dat_hmm %>% 
+  dplyr::select(ID, x, y, t = time, states) %>% 
+  filter(states == 2) %>% 
+  dplyr::select(ID, x, y, t)
+#resting data
+dat_r <- dat_hmm %>% 
+  dplyr::select(ID, x, y, t = time, states) %>% 
+  filter(states == 1) %>% 
+  dplyr::select(ID, x, y, t)
+
+#dat_r %>% group_by(ID) %>% summarise(n()) #check which IDs are empty
+```
+
+### Traveling
+```{r}
+#create tracks
+dat_t <- dat_t %>% nest(-ID) %>%  
+  mutate(trk = map(data, function(d){
+    mk_track(d, x, y, t, crs = CRS("+init=epsg:26910"))
+  }))
+#fit ssf
+mt <- dat_t %>%
+mutate(steps = map(trk, function(x) {
+        x %>% amt::track_resample(rate = hours(1), tolerance = minutes(5)) %>%
+        amt::filter_min_n_burst() %>%
+        amt::steps_by_burst() %>% 
+        amt::random_steps() %>%
+        amt::extract_covariates(lu, where = "both") %>%
+        mutate(landuse_end = factor(landuse_end))
+        }),
+       fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end + strata(step_id_)))) 
+#extract coefficients
+t <- mt %>% 
+      mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, coef) %>% unnest %>%
+      mutate(state = "Traveling")
+```
+
+### Meandering
+```{r}
+#create tracks
+dat_m <- dat_m %>% nest(-ID) %>% 
+  mutate(trk = map(data, function(d){
+    mk_track(d, x, y, t, crs = CRS("+init=epsg:26910"))
+  }))
+#fit ssf
+mm <- dat_m %>%
+mutate(steps = map(trk, function(x) {
+        x %>% amt::track_resample(rate = hours(1), tolerance = minutes(5)) %>%
+        amt::filter_min_n_burst() %>%
+        amt::steps_by_burst() %>% 
+        amt::random_steps() %>%
+        amt::extract_covariates(lu, where = "both") %>%
+        mutate(landuse_end = factor(landuse_end))
+        }),
+       fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end + strata(step_id_)))) 
+#extract coefficients
+m <- mm %>% 
+      mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, coef) %>% unnest %>%
+      mutate(state = "Meandering")
+```
+
+
+### Resting
+```{r}
+#create tracks
+dat_r <- dat_r %>% nest(-ID) %>% 
+  mutate(trk = map(data, function(d){
+    mk_track(d, x, y, t, crs = CRS("+init=epsg:26910"))
+  }))
+#fit ssf
+mr <- dat_r %>%
+mutate(steps = map(trk, function(x) {
+        x %>% amt::track_resample(rate = hours(1), tolerance = minutes(5)) %>%
+        amt::filter_min_n_burst() %>%
+        amt::steps_by_burst() %>% 
+        amt::random_steps() %>%
+        amt::extract_covariates(lu, where = "both") %>%
+        mutate(landuse_end = factor(landuse_end))
+        }),
+       fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end + strata(step_id_)))) 
+#extract coefficients
+r <- mr %>% 
+      mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, coef) %>% unnest %>% 
+      mutate(state = "Resting")
+```
+
+
+```{r}
+ssf_states <- rbind(r,m,t)
+
+ssf_behavior <- ssf_states %>% 
+  group_by(state,term) %>% 
+  summarise(Estimate = mean(estimate),
+            SE = mean(std.error)) %>% 
+  pivot_wider(state, names_from = "term", values_from = c("Estimate", "SE")) %>% 
+  dplyr::select(1,2,4,3,5)
+
+colnames(ssf_behavior) <- c("Behavioral State","Estimate (Cropland)","SE","Estimate (Natural)","SE2")
+
+full <- read_csv("data/ssf_landuse_combined.csv") %>% rbind(.,ssf_behavior) %>% as.tibble()
+write_csv(full, "data/ssf_landuse_full.csv")
+```
+
+```{r}
+st <- data.frame(ID = c("C4","C3","C1","C2","C5","C6","C7","C8","C9"),
+           sex = c("m","m","f","f","m","m","f","m","f"))
+     
+p_sums <- full %>% 
+  dplyr::select(-SE, -SE2) %>% 
+  pivot_longer(2:3, names_to = "term", values_to = "estimate") %>% 
+  mutate(term = ifelse(term == "Estimate (Cropland)", 
+                       "landuse_end1", "landuse_end2")) %>% 
+  mutate(state = `Behavioral State`)
+
+
+p_dat <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
+      dplyr::select(ID, coef) %>% unnest %>%
+      filter(ID != "C5", ID != "C6") %>% 
+      mutate(ID = factor(ID), 
+             state = c("Combined")) %>% 
+      rbind(ssf_states) %>% left_join(st, by = "ID")
+
+p_dat$state = factor(p_dat$state, levels=c("Combined","Resting","Meandering","Traveling"))
+
+landuse_ssfs <- ggplot() +
+        geom_point(data = p_dat,
+                   aes(x = term, y = estimate, group = ID, col = ID, pch = sex),
+                   position = position_dodge(width = 0.7), size = 0.8) +
+        geom_point(data = p_sums, aes(x = term, y = estimate), size = 1, pch = 8) +
+        geom_hline(yintercept = 0, lty = 2) +
+        labs(x = "Habitat", y = "Relative Selection Strength") +
+        theme_light() +
+        scale_x_discrete(labels = c("Cropland", "Natural")) +
+        facet_wrap( ~ state, ncol=4)
+
+save(landuse_ssfs, file = "landuse_ssfs_plot.Rdata")
+```
+
