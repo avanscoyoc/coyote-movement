@@ -54,6 +54,7 @@ coyote_sp <- coyote %>%
 #create Kernel Utilization Distributions 
 kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
 coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95 , unout = "km2")
+#save(coyote_hr, file = "data_objects/coyote_hr.Rdata")
 
 #plot
 plot(coyote_hr, col = coyote_hr$ID)
@@ -173,8 +174,13 @@ habitat <- glmer(Used ~ habitat.scaled + (1|ID),
                  data=coyote_full, family=binomial(link="logit"))
 
 # Make a list of your models and compare the deltaAIC, log likelihood, and akaike weights
-cand.models <- c(lion, hunter, humans, livestock, crop, habitat)
-print(indv_mods <- data.frame(aictab(cand.models)))
+cand.models <- c(combined, lion, hunter, humans, livestock, crop, habitat)
+names(cand.models) <- c("Full model", "Lion risk", "Hunter risk", "Human presence", "Livestock distance", "Cropland distance", "Habitat distance")
+indv_mods <- data.frame(aictab(cand.models)) %>% 
+  dplyr::select(1,"LL", "AICc","Delta_AICc") %>% 
+  rename(Model = Modnames, Log_Likelihood = LL)
+tab_df(indv_mods)
+
 ```
 
 ### Check combined model for weights
@@ -184,8 +190,8 @@ combined <- glmer(Used ~ lion.scaled + hunter.scaled + humans.scaled +
                  data=coyote_full, family=binomial(link="logit"))
 summary(combined)
 
-sjPlot::plot_model(combined, type = "slope") 
-sjPlot::plot_model(combined, type = "re")
+#sjPlot::plot_model(combined, type = "slope") 
+#sjPlot::plot_model(combined, type = "re")
 ```
 
 
@@ -206,10 +212,14 @@ travel_mod <- glmer(Used ~ lion.scaled + hunter.scaled + humans.scaled +
                  data = filter(coyote_full, is.na(states)|states==3), 
                  family = binomial(link="logit"))
 
-sjPlot::plot_model(rest_mod, type = "slope") 
-sjPlot::plot_model(forage_mod, type = "slope") 
-sjPlot::plot_model(travel_mod, type = "slope") 
+
+pp1 <- plot_model(combined,type="pred")
+pp2 <- plot_model(rest_mod,type="pred")
+plot_grid(c(pp1,pp2))
+
 ```
+
+
 ```{r}
 sjPlot::tab_model(combined, rest_mod, forage_mod, travel_mod, 
           dv.labels = c("Combined","Resting","Foraging","Traveling"),
@@ -217,16 +227,16 @@ sjPlot::tab_model(combined, rest_mod, forage_mod, travel_mod,
                           "Distance to Livestock", "Distance to Cropland", "Habitat"),
           show.re.var = FALSE, show.ngroups = FALSE, show.icc = FALSE,
           string.pred = "Covariates", string.ci = "CI", p.style = "stars")
-
+library(jtools)
 jtools::plot_summs(combined, rest_mod, forage_mod, travel_mod, scale = TRUE, 
            model.names = c("Combined", "Resting", "Foraging", "Traveling"),
            coefs = c("Lion risk"="lion.scaled", 
                      "Hunter risk"="hunter.scaled", 
-                     "Human presence"="humans.scaled", 
+                     "Distance to Development"="humans.scaled", 
                      "Distance to Livestock"="livestock.scaled",
                      "Distance to Cropland"="crop.scaled", 
-                     "Habitat"="habitat.scaled"), 
-           colors = c("black","orange","blue2","seagreen")) 
+                     "Distance to Habitat"="habitat.scaled"), 
+           colors = c("black","#E7B800", "#00afbb", "seagreen")) 
 ```
 
 

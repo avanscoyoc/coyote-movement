@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ```{r}
+library(here)
 library(tidyverse)
 library(ggplot2)
 ```
@@ -20,7 +21,7 @@ state <- map_data("state")
 ca <- subset(state, region=="california")
 
 #import sanel study site
-sv <- st_read("data_covariates/study_site/SanelValley_studysite.shp", crs = st_crs(4326)) 
+sv <- st_read(here("data_covariates", "study_site", "SanelValley_studysite.shp"), crs = st_crs(4326)) 
 
 
 ca_map <- ggplot() + 
@@ -34,27 +35,32 @@ ca_map
 
 ```{r}
 #Load KUD
-load(file = "kud_coyote.Rdata")
+load(file = here("data_objects", "coyote_hr.Rdata"))
 #set as sf object
-hr <- st_as_sf(kud_contour) %>% 
-  filter(id!="C6") 
+hr <- st_as_sf(coyote_hr)
 
 #package for scale bar
 library(ggsn)
 library(ggspatial) #package for base layer
 
 hopland_map <- ggplot() +
-  #geom_sf(data=hr, fill = NA, color = factor(hr$id)) +
-  #annotation_map_tile("stamenbw") +
-  geom_sf(data=hr, fill = NA, color = factor(hr$id)) +
-  geom_sf(data=sv, fill=NA, color="gray") + 
-  theme(axis.title.x=element_blank(), 
+  geom_sf(data=hr, fill = NA, aes(color = factor(id)), show.legend = "line") +
+  annotation_map_tile("cartolight", zoom = 14) +
+  geom_sf(data=hr, fill = NA, aes(color = factor(id)), show.legend = "line") +
+  #geom_sf(data=sv, fill=NA, color="gray") + 
+  scale_color_brewer(palette="Dark2") +
+  labs(color = "") +
+  theme(legend.position='right', 
+        legend.box.background = element_blank(),
+        legend.key = element_blank(),
+        legend.box = element_blank(),
+        axis.title.x=element_blank(), 
         axis.text.x=element_blank(), 
         axis.ticks.x=element_blank(),
         axis.title.y=element_blank(), 
         axis.text.y=element_blank(), 
-        axis.ticks.y=element_blank()) + 
-  theme_void() + 
+        axis.ticks.y=element_blank()) +
+  theme_void() +
   scalebar(hr, location = "bottomleft", dist = 2.5, dist_unit = "km", height = 0.02, 
            st.dist = 0.02, st.bottom = TRUE, st.size = 2.5,
              transform = FALSE, model = "WGS84") + 
@@ -67,9 +73,9 @@ hopland_map
 library(cowplot)
 ## draw insets
 p1 <- ggdraw() +
-  draw_plot(hopland_map, x = 0.35, width = 0.5, height = 0.9) +
+  draw_plot(hopland_map, x = 0.35, width = 0.6, height = 0.95) +
   draw_plot(ca_map, x = 0.05, y = 0.35, width = 0.3, height = 0.5)
 
-
+p1
 ```
 
