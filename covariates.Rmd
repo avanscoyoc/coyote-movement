@@ -12,6 +12,7 @@ library(tidyverse) #data tidying
 library(sf) #modifying spatial attributes 
 library(raster) #reclassify, stack environmental covariates
 library(sdmvspecies) #rescale environmental covariates 
+library(tmap) #plots
 ```
 
 ### Reclassify Land Cover
@@ -41,20 +42,26 @@ road_vec <- c(-1, 20, NA, #set others to NA
             21, Inf, NA) %>% #set others to NA
             matrix(., ncol = 3, byrow = T)
 
-#create livestock/pasture land layer
-lvstk_vec <- c(-1, 70, NA, #set others to NA 
-            70, 71, 1,  #combine grass pasture layer 71
-            71, Inf, NA) %>% #set others to NA
-            matrix(., ncol = 3, byrow = T)
-
 #create cropland layer
 crop_vec <- c(-1, 80, NA, #set others to NA 
             80, 82, 1,  #combine grass pasture layer 81, 82
             82, Inf, NA) %>% #set others to NA
             matrix(., ncol = 3, byrow = T)
 
+#create livestock/pasture land layer
+grass_vec <- c(-1, 70, NA, #set others to NA 
+            70, 71, 1,  #combine grass pasture layer 71
+            71, Inf, NA) %>% #set others to NA
+            matrix(., ncol = 3, byrow = T)
+
+#create shrub land layer
+shrub_vec <- c(-1, 51, NA, #set others to NA 
+            51, 52, 1,  #combine grass pasture layer 71
+            52, Inf, NA) %>% #set others to NA
+            matrix(., ncol = 3, byrow = T)
+
 #create habitat cover layer
-cover_vec <- c(-1, 40, NA, #set others to NA 
+forest_vec <- c(-1, 40, NA, #set others to NA 
             40, 43, 1,  #combine forest 41, 42, 43
             43, 51, NA, #set others to NA 
             51, 52, NA, #set to NA for now -- combine shrub 52???
@@ -69,7 +76,7 @@ water_vec <- c(-1, 10, NA, #set others to NA
             matrix(., ncol = 3, byrow = T)
 
 #lion habitat layer
-shrub_vec <- c(-1, 40, NA, #set others to NA 
+lion_vec <- c(-1, 40, NA, #set others to NA 
             40, 43, 0,  #combine forest 41, 42, 43 (med visibility)
             43, 51, NA, #set others to NA 
             51, 52, 1, #combine shrub 52 (least visibility)
@@ -79,7 +86,7 @@ shrub_vec <- c(-1, 40, NA, #set others to NA
             matrix(., ncol = 3, byrow = T)
 
 #hunter habitat layer
-hab_vec <- c(-1, 40, NA, #set others to NA 
+viewshed_vec <- c(-1, 40, NA, #set others to NA 
             40, 43, 1,  #combine forest 41, 42, 43 (med visibility)
             43, 51, NA, #set others to NA 
             51, 52, 0, #combine shrub 52 (least visibility)
@@ -87,51 +94,43 @@ hab_vec <- c(-1, 40, NA, #set others to NA
             70, 71, 2, #combine grassland 71 (most visible) 
             71, Inf, NA) %>% #set others to NA  
             matrix(., ncol = 3, byrow = T)
-
-#edge habitat layer
-edge_vec <- c(-1, 40, NA, #set others to NA 
-            40, 43, 1,  #combine forest 41, 42, 43 (cover)
-            43, 51, NA, #set others to NA 
-            51, 52, 1, #combine shrub 52 (cover)
-            52, 70, NA, #set others to NA  
-            70, 71, NA, #set grassland 71 to open (open) 
-            71, Inf, NA) %>% #set others to NA  
-            matrix(., ncol = 3, byrow = T)
 ```
-
 
 ```{r}
 #reclassify land cover values 
 dev <- reclassify(lc, dev_vec)
 road <- reclassify(lc, road_vec)
-lvstk <- reclassify(lc, lvstk_vec)
 crop <- reclassify(lc, crop_vec)
-water <- reclassify(lc, water_vec)
-shrub <- reclassify(lc, shrub_vec)
-habitat <- reclassify(lc, hab_vec)
-edge <- reclassify(lc, edge_vec)
 
+grass <- reclassify(lc, grass_vec)
+forest <- reclassify(lc, forest_vec)
+shrub <- reclassify(lc, shrub_vec)
+water <- reclassify(lc, water_vec)
+
+lion <- reclassify(lc, lion_vec)
+viewshed <- reclassify(lc, viewshed_vec)
+```
+
+```{r}
 #create distance rasters
 dev_dist <- gridDistance(dev, origin = 1)
 road_dist <- gridDistance(road, origin = 1)
-lvstk_dist <- gridDistance(lvstk, origin = 1)
 crop_dist <- gridDistance(crop, origin = 1)
+
+grass_dist <- gridDistance(grass, origin = 1)
+forest_dist <- gridDistance(forest, origin = 1)
+shrub_dist <- gridDistance(shrub, origin = 1)
 water_dist <- gridDistance(water, origin = 1)
-edge_dist <- boundaries(edge) %>% gridDistance(., origin = 1)
 ```
 
-### Lion risk layer
+### Lion Risk layer
 
 Model = Shrub Habitat, Elevation
 ```{r}
-#rescale
+#rescale & stack
 elev_sc <- rescale(elev) #scale elevation layer 
-
-#stack
-lion <- stack(shrub, elev_sc) #stack habitat and elevation
+lion <- stack(lion, elev_sc) #stack habitat and elevation
 lion <- stackApply(lion, indices = rep(1, nlayers(lion)), fun = sum) #sum 
-
-#plot lion risk map
 p0 <- tm_shape(lion) + tm_raster(style = "cont", palette = "YlOrRd") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Lion Risk',legend.outside = T,title.position=c("center",'top'))
 ```
 
@@ -140,64 +139,47 @@ p0 <- tm_shape(lion) + tm_raster(style = "cont", palette = "YlOrRd") + tm_shape(
 Model = Visibility, Road Dist, Slope
 ```{r}
 #create parcel mask for where hunters won't hunt
-parcels <- buffer(dev, width = 150)
-
+parcels <- raster::buffer(dev, width = 150)
 #rescale
 road_sc <- rescale(-road_dist) #scale inverse of road layer 
 slope_sc <- rescale(slope) #scale slope layer 
-habitat_sc <- rescale(habitat) #scale habitat layer
-
+viewshed_sc <- rescale(viewshed) #scale hunter layer
 #stack
-hunter <- stack(habitat_sc, road_sc, slope_sc) #stack habitat and elevation
+hunter <- stack(viewshed_sc, road_sc, slope_sc) #stack habitat and elevation
 hunter <- stackApply(hunter, indices = rep(1, nlayers(hunter)), fun = sum) #sum scaled values
 hunter <- mask(hunter, parcels, inverse=TRUE) #remove dev from hunter risk
-
+hunter[is.na(hunter)] <- 0 #set masked values to 0 instead of NA
 #plot hunter risk 
 p1 <- tm_shape(hunter) + tm_raster(style = "cont", palette = "YlOrRd") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Hunter Risk',legend.outside = T,title.position=c("center",'top'))
 ```
 
-### Human presence layer
-
-Model = distance to development + distance to roads
+### Other layers
 ```{r}
-humans <- stack(dev_dist,road_dist) #stack habitat and elevation
-humans <- stackApply(humans, indices = rep(1, nlayers(humans)), fun = max) #max scaled values
-#plot
-p2 <- tm_shape(humans) + tm_raster(style = "cont", palette = "RdYlBu") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Human Presence',legend.outside = T,title.position=c("center",'top'))
-```
+tmlayer <- function(layer,title){
+  tm_shape(layer) + 
+    tm_raster(style = "cont", palette = "seq") +
+  tm_layout(aes.palette = list(seq = "-YlOrRd")) +
+  tm_shape(hopland) + 
+    tm_borders(col = "white") + 
+    tm_layout(legend.show = F, title=title, title.color = "white",
+              legend.outside = T, title.position=c("center","bottom")) 
+}
 
-### Livestock layer
+tmap_arrange(
+  tmlayer(dev_dist, "Development"), tmlayer(crop_dist, "Crop"),
+  tmlayer(grass_dist, "Pasture"), tmlayer(water_dist, "Water"), 
+  tmlayer(forest_dist, "Forest"), tmlayer(shrub_dist, "Shrub"), p0, p1, ncol = 4)
 
-Model = distance to pasture + distance to water
-```{r}
-#plot
-p3 <- tm_shape(lvstk_dist) + tm_raster(style = "cont", palette = "RdYlBu") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Livestock',legend.outside = T,title.position=c("center",'top'))
-```
-
-### Cropland layer
-
-Model = distance to cropland + distance to water
-```{r}
-#plot
-p4 <-tm_shape(crop_dist) + tm_raster(style = "cont", palette = "RdYlBu") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Cropland',legend.outside = T,title.position=c("center",'top'))
-```
-
-### Habitat layer
-
-Model = distance to edge + distance to water
-```{r}
-coyote_hab <- stack(edge_dist, water_dist) #stack habitat and elevation
-coyote_hab <- stackApply(coyote_hab, indices = rep(1, nlayers(coyote_hab)), fun = min) #max scaled values
-
-#plot
-p5 <- tm_shape(coyote_hab) + tm_raster(style = "cont", palette = "YlOrRd") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Coyote Habitat',legend.outside = T,title.position=c("center",'top'))
 ```
 
 ### Models
 ```{r}
-tmap_arrange(p0,p1,p2,p3,p4,p5, ncol = 3)
-envt <- stack(lion, hunter, humans, lvstk_dist, crop_dist, coyote_hab)
-names(envt) <- c("lion","hunter","humans","livestock","crop","habitat")
+envt <- stack(elev, slope, dev_dist, road_dist, crop_dist, 
+              grass_dist, forest_dist, shrub_dist, water_dist, 
+              lion, hunter)
+names(envt) <- c("elev", "slope", "dev_dist","road_dist","crop_dist",
+                 "grass_dist","forest_dist","shrub_dist","water_dist",
+                 "lion","hunter")
 save(envt, file = "data_objects/envt.Rdata")
 ```
 
