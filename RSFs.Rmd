@@ -40,6 +40,7 @@ coyote <- coyote %>%
          sex = ifelse(grepl("^F",ID),"female","male")) %>% 
   dplyr::select(ID, x, y, t, states, daynight, sex)
 
+save(coyote, file = "data_objects/coyote.Rdata")
 ```
 
 
@@ -185,6 +186,20 @@ plot(coyote_hr, col = coyote_hr$ID)
 #HR area (km2)
 kernel.area(kud_all, percent = 95) %>% 
   pivot_longer(1:8,names_to = "ID", values_to = "Area (km^2)")
+
+# Home range figure
+# map <- leaflet(width = "65%", options = leafletOptions(zoomControl = FALSE), sdf_poly) %>% addTiles() %>%
+#   addPolygons(weight = 1, fillOpacity = .4, color = ~pal(coyote_hr$id)) %>%
+#   addLegend('bottomleft', pal = pal, values = ~coyote_hr$id, title = 'ID') %>% 
+#   addMiniMap(
+#     #tiles = providers$Esri.OceanBasemap,
+#     position = 'topright', 
+#     width = 100, height = 200,
+#     zoomLevelOffset = -6) %>%
+#   # add graticules with nice labels (recommended for static plot)
+#   addScaleBar(position = c("bottomright"))
+# library(mapview)
+# mapshot(map, file = 'leaflet_map.png')
 ```
 
 
@@ -335,14 +350,14 @@ landuse_mod_night <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + s
 library(jtools)
 
 #Best model
-jtools::plot_summs(landuse_mod, scale = TRUE, 
-           model.names = c("Full"),
+jtools::plot_summs(landuse_mod, landuse_mod_day, landuse_mod_night, scale = TRUE, 
+           model.names = c("Full", "Day", "Night"),
            coefs = c("Crop dist."="crop_dist.s",
                      "Pasture dist."="grass_dist.s",
                      "Forest dist."="forest_dist.s",
                      "Shrub dist."="shrub_dist.s",
                      "Development dist."="dev_dist.s"), 
-           colors = c("black")) 
+           colors = c("black","white","white")) 
 
 #Best model - Day / Night
 jtools::plot_summs(landuse_mod, landuse_mod_day, landuse_mod_night, scale = TRUE, 

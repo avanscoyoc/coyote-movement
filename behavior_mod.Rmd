@@ -1,0 +1,261 @@
+---
+title: "behavior_mod"
+author: "Amy Van Scoyoc"
+date: "8/14/2022"
+output: github_document
+---
+
+```{r}
+library(here) #reproducible working directory
+library(tidyverse) #data wrangling
+library(sp) #for spatial points
+library(sf) #for spatial transformations with pipes
+library(adehabitatHR) #for calculating homerange KUDs
+library(raster) #for importing and extracting covariates
+library(lme4) #for glmer models
+library(performance) #check models
+library(jtools) #plot estimates
+```
+
+```{r}
+#import dataset
+load(here("data_objects","coyote.Rdata"))
+#import covariates
+load(here("data_objects","envt.Rdata"))
+```
+
+### Resting top models
+
+### Calculate Rest Home Ranges (Kernel Utilization Distribution)
+```{r}
+#create object for calculating HRs
+coyote_sp <- coyote %>%
+   filter(states == 1) %>% #filter to day only
+   dplyr::select(ID,x,y) %>% #select data 
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910") %>% #transform back to UTMs
+   as("Spatial") #transform back to sp object for KUDs
+
+#create Kernel Utilization Distributions 
+kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
+coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95 , unout = "km2")
+
+#HR area (km2)
+kernel.area(kud_all, percent = 95) %>% 
+  pivot_longer(1:8,names_to = "ID", values_to = "Area (km^2)")
+```
+
+
+### Sample available points in Home Ranges
+```{r}
+coyote_rest <- coyote %>% 
+  filter(states == 1) %>% #filter to rest only
+  mutate(Used = 1) %>% #add column to indicate used points
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910")  #transform back to UTMs
+
+coyote_ids <- unique(coyote_rest$ID) # Extract a list of IDs
+availables <- list() #empty list to store available pts by ID
+
+# Randomly sample available points from within the home range of each individual
+for(i in 1:length(coyote_ids)){
+    st_sample(st_as_sf(coyote_hr)[i,], 5*nrow(filter(coyote_rest, ID == coyote_ids[i]))) %>%  #5:1 ratio
+    st_sf(geometry = .) %>%
+    mutate(ID = coyote_ids[i], 
+           t = NA,
+           states = NA,
+           daynight = NA,
+           sex = NA,
+           Used = 0) -> availables[[i]]  
+}
+
+# Then combine individual lists into one data.frame
+# Then merge with used coyote GPS points data frame
+coyote_rest <- availables %>% 
+  do.call(rbind,.) %>% 
+  rbind(coyote_rest, .) %>% 
+  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+
+# Check that we have a 5:1 ratio of used:available points
+table(coyote_rest$ID,coyote_rest$Used)
+```
+
+### Foraging top models
+
+### Calculate Forage Home Ranges (Kernel Utilization Distribution)
+```{r}
+#create object for calculating HRs
+coyote_sp <- coyote %>%
+   filter(states == 2) %>% #filter to rest only
+   dplyr::select(ID,x,y) %>% #select data 
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910") %>% #transform back to UTMs
+   as("Spatial") #transform back to sp object for KUDs
+
+#create Kernel Utilization Distributions 
+kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
+coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95 , unout = "km2")
+
+#HR area (km2)
+kernel.area(kud_all, percent = 95) %>% 
+  pivot_longer(1:8,names_to = "ID", values_to = "Area (km^2)")
+```
+
+
+### Sample available points in Home Ranges
+```{r}
+coyote_forage <- coyote %>% 
+  filter(states == 2) %>% #filter to rest only
+  mutate(Used = 1) %>% #add column to indicate used points
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910")  #transform back to UTMs
+
+coyote_ids <- unique(coyote_forage$ID) # Extract a list of IDs
+availables <- list() #empty list to store available pts by ID
+
+# Randomly sample available points from within the home range of each individual
+for(i in 1:length(coyote_ids)){
+    st_sample(st_as_sf(coyote_hr)[i,], 5*nrow(filter(coyote_forage, ID == coyote_ids[i]))) %>%  #5:1 ratio
+    st_sf(geometry = .) %>%
+    mutate(ID = coyote_ids[i], 
+           t = NA,
+           states = NA,
+           daynight = NA,
+           sex = NA,
+           Used = 0) -> availables[[i]]  
+}
+
+# Then combine individual lists into one data.frame
+# Then merge with used coyote GPS points data frame
+coyote_forage <- availables %>% 
+  do.call(rbind,.) %>% 
+  rbind(coyote_forage, .) %>% 
+  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+
+# Check that we have a 5:1 ratio of used:available points
+table(coyote_forage$ID,coyote_forage$Used)
+```
+
+### Traveling top models
+
+### Calculate Travel Home Ranges (Kernel Utilization Distribution)
+```{r}
+#create object for calculating HRs
+coyote_sp <- coyote %>%
+   filter(states == 3) %>% #filter to rest only
+   dplyr::select(ID,x,y) %>% #select data 
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910") %>% #transform back to UTMs
+   as("Spatial") #transform back to sp object for KUDs
+
+#create Kernel Utilization Distributions 
+kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
+coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95 , unout = "km2")
+
+#HR area (km2)
+kernel.area(kud_all, percent = 95) %>% 
+  pivot_longer(1:8,names_to = "ID", values_to = "Area (km^2)")
+```
+
+
+### Sample available points in Home Ranges
+```{r}
+coyote_travel <- coyote %>% 
+  filter(states == 3) %>% #filter to rest only
+  mutate(Used = 1) %>% #add column to indicate used points
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910")  #transform back to UTMs
+
+coyote_ids <- unique(coyote_travel$ID) # Extract a list of IDs
+availables <- list() #empty list to store available pts by ID
+
+# Randomly sample available points from within the home range of each individual
+for(i in 1:length(coyote_ids)){
+    st_sample(st_as_sf(coyote_hr)[i,], 5*nrow(filter(coyote_travel, ID == coyote_ids[i]))) %>%  #5:1 ratio
+    st_sf(geometry = .) %>%
+    mutate(ID = coyote_ids[i], 
+           t = NA,
+           states = NA,
+           daynight = NA,
+           sex = NA,
+           Used = 0) -> availables[[i]]  
+}
+
+# Then combine individual lists into one data.frame
+# Then merge with used coyote GPS points data frame
+coyote_travel <- availables %>% 
+  do.call(rbind,.) %>% 
+  rbind(coyote_travel, .) %>% 
+  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+
+# Check that we have a 5:1 ratio of used:available points
+table(coyote_travel$ID,coyote_travel$Used)
+```
+
+
+### Behavior Mods
+```{r}
+#import best full model 
+load(here("data_objects","full_mod.Rdata"))
+
+rest_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
+                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+                  data = coyote_rest, family=binomial(link="logit")) #drop elev (correlated w/ crop)
+
+forage_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
+                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+                  data = coyote_forage, family=binomial(link="logit")) #drop elev (correlated w/ crop)
+
+travel_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
+                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+                  data = coyote_travel, family=binomial(link="logit")) #drop elev (correlated w/ crop)
+
+model_performance(full_mod_alt)
+model_performance(rest_mod)
+model_performance(forage_mod)
+model_performance(travel_mod)
+```
+
+```{r}
+#Best model
+jtools::plot_summs(full_mod_alt, rest_mod, forage_mod, travel_mod, scale = TRUE, 
+           model.names = c("Full", "Resting", "Foraging", "Traveling"),
+           coefs = c("Crop dist."="crop_dist.s",
+                     "Pasture dist."="grass_dist.s",
+                     "Forest dist."="forest_dist.s",
+                     "Shrub dist."="shrub_dist.s",
+                     "Development dist."="dev_dist.s",
+                     "Road dist."="road_dist.s",
+                     "Slope"="slope.s"),
+           colors = c("black","#CC9900","#339999","#006633")) 
+```
