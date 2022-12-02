@@ -18,15 +18,18 @@ library(tmap) #plots
 ### Reclassify Land Cover
 
 ```{r}
-#import hopland layer 
-hopland <- st_read(here("data_covariates", "HREC_boundary", "HREC_boundary.shp"))
-#import elevation layer for mt lions
-elev <- raster(here("data_covariates", "HREC_elevation_extended.tif"))
-#import slope layer for hunters
-slope <- raster(here("data_covariates", "HREC_slope_extended.tif"))
 #import landcover layer
-lc <- raster(here("data_covariates", "HREC_landcover_extended.tif"))
-#freq(lc)
+lc <- raster(here("data_covariates", "covariates_from_GEE", "HREC_landcover_extended.tif"))
+#import elevation layer
+elev <- raster(here("data_covariates", "covariates_from_GEE", "HREC_elevation_extended.tif"))
+#create ruggedness (Terrain Ruggedness Index) layer
+tri <- raster::terrain(elev, "TRI", neigbors=8, 
+                       filename = here("data_covariates", "HREC_tri.tif"), overwrite=T)
+
+#import Hopland Research and Extension Center boundary  
+hopland <- st_read(here("data_covariates", "HREC_boundary", "HREC_boundary.shp"))
+#set crs HREC boundary 
+hopland <- st_transform(hopland, st_crs(lc))
 ```
 
 ```{r}
@@ -48,50 +51,13 @@ crop_vec <- c(-1, 80, NA, #set others to NA
             82, Inf, NA) %>% #set others to NA
             matrix(., ncol = 3, byrow = T)
 
-#create livestock/pasture land layer
-grass_vec <- c(-1, 70, NA, #set others to NA 
-            70, 71, 1,  #combine grass pasture layer 71
-            71, Inf, NA) %>% #set others to NA
-            matrix(., ncol = 3, byrow = T)
-
-#create shrub land layer
-shrub_vec <- c(-1, 51, NA, #set others to NA 
-            51, 52, 1,  #combine grass pasture layer 71
-            52, Inf, NA) %>% #set others to NA
-            matrix(., ncol = 3, byrow = T)
-
-#create habitat cover layer
-forest_vec <- c(-1, 40, NA, #set others to NA 
-            40, 43, 1,  #combine forest 41, 42, 43
-            43, 51, NA, #set others to NA 
-            51, 52, NA, #set to NA for now -- combine shrub 52???
-            52, Inf, NA) %>% #set others to NA
-            matrix(., ncol = 3, byrow = T)
-
-water_vec <- c(-1, 10, NA, #set others to NA 
-            10, 11, 1,  #combine water 11
-            11, 89, NA, #set others to NA 
-            89, 95, 1, #combine water 90 and 95
-            95, Inf, NA) %>% #set others to NA
-            matrix(., ncol = 3, byrow = T)
-
-#lion habitat layer
-lion_vec <- c(-1, 40, NA, #set others to NA 
-            40, 43, 0,  #combine forest 41, 42, 43 (med visibility)
+#habitat layer
+veg_vec <- c(-1, 40, NA, #set others to NA 
+            40, 43, 2,  #combine forest 41, 42, 43 (med visibility)
             43, 51, NA, #set others to NA 
             51, 52, 1, #combine shrub 52 (least visibility)
             52, 70, NA, #set others to NA  
-            70, 71, 0, #combine grassland 71 (most visible) 
-            71, Inf, NA) %>% #set others to NA  
-            matrix(., ncol = 3, byrow = T)
-
-#hunter habitat layer
-viewshed_vec <- c(-1, 40, NA, #set others to NA 
-            40, 43, 1,  #combine forest 41, 42, 43 (med visibility)
-            43, 51, NA, #set others to NA 
-            51, 52, 0, #combine shrub 52 (least visibility)
-            52, 70, NA, #set others to NA  
-            70, 71, 2, #combine grassland 71 (most visible) 
+            70, 71, 3, #combine grassland 71 (most visible) 
             71, Inf, NA) %>% #set others to NA  
             matrix(., ncol = 3, byrow = T)
 ```
@@ -101,14 +67,11 @@ viewshed_vec <- c(-1, 40, NA, #set others to NA
 dev <- reclassify(lc, dev_vec)
 road <- reclassify(lc, road_vec)
 crop <- reclassify(lc, crop_vec)
+veg <- reclassify(lc, veg_vec)
 
-grass <- reclassify(lc, grass_vec)
-forest <- reclassify(lc, forest_vec)
-shrub <- reclassify(lc, shrub_vec)
-water <- reclassify(lc, water_vec)
-
-lion <- reclassify(lc, lion_vec)
-viewshed <- reclassify(lc, viewshed_vec)
+#convert vegetation raster to categorical values
+type <- data.frame(ID=1:3, cover=c("Shrub", "Woodland", "Grassland"))
+levels(veg) <- type
 ```
 
 ```{r}
@@ -116,70 +79,189 @@ viewshed <- reclassify(lc, viewshed_vec)
 dev_dist <- gridDistance(dev, origin = 1)
 road_dist <- gridDistance(road, origin = 1)
 crop_dist <- gridDistance(crop, origin = 1)
-
-grass_dist <- gridDistance(grass, origin = 1)
-forest_dist <- gridDistance(forest, origin = 1)
-shrub_dist <- gridDistance(shrub, origin = 1)
-water_dist <- gridDistance(water, origin = 1)
 ```
 
-### Lion Risk layer
-
-Model = Shrub Habitat, Elevation
-```{r}
-#rescale & stack
-elev_sc <- rescale(elev) #scale elevation layer 
-lion <- stack(lion, elev_sc) #stack habitat and elevation
-lion <- stackApply(lion, indices = rep(1, nlayers(lion)), fun = sum) #sum 
-p0 <- tm_shape(lion) + tm_raster(style = "cont", palette = "YlOrRd") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Lion Risk',legend.outside = T,title.position=c("center",'top'))
-```
-
-### Hunter risk layer
-
-Model = Visibility, Road Dist, Slope
-```{r}
-#create parcel mask for where hunters won't hunt
-parcels <- raster::buffer(dev, width = 150)
-#rescale
-road_sc <- rescale(-road_dist) #scale inverse of road layer 
-slope_sc <- rescale(slope) #scale slope layer 
-viewshed_sc <- rescale(viewshed) #scale hunter layer
-#stack
-hunter <- stack(viewshed_sc, road_sc, slope_sc) #stack habitat and elevation
-hunter <- stackApply(hunter, indices = rep(1, nlayers(hunter)), fun = sum) #sum scaled values
-hunter <- mask(hunter, parcels, inverse=TRUE) #remove dev from hunter risk
-hunter[is.na(hunter)] <- 0 #set masked values to 0 instead of NA
-#plot hunter risk 
-p1 <- tm_shape(hunter) + tm_raster(style = "cont", palette = "YlOrRd") + tm_shape(hopland) + tm_borders(col = "black") + tm_layout(legend.show = F,title='Hunter Risk',legend.outside = T,title.position=c("center",'top'))
-```
-
-### Other layers
+### Plot layers
 ```{r}
 tmlayer <- function(layer,title){
   tm_shape(layer) + 
     tm_raster(style = "cont", palette = "seq") +
   tm_layout(aes.palette = list(seq = "-YlOrRd")) +
   tm_shape(hopland) + 
-    tm_borders(col = "white") + 
-    tm_layout(legend.show = F, title=title, title.color = "white",
+    tm_borders(col = "blue") + 
+    tm_layout(legend.show = T, panel.show=T, panel.labels=title,
               legend.outside = T, title.position=c("center","bottom")) 
 }
 
 tmap_arrange(
-  tmlayer(dev_dist, "Development"), tmlayer(crop_dist, "Crop"),
-  tmlayer(grass_dist, "Pasture"), tmlayer(water_dist, "Water"), 
-  tmlayer(forest_dist, "Forest"), tmlayer(shrub_dist, "Shrub"), p0, p1, ncol = 4)
-
+  tmlayer(elev, "Elevation"),
+  tmlayer(tri, "Ruggedness"),
+  tmlayer(veg, "Vegetation type"),
+  tmlayer(dev_dist, "Distance to development"),
+  tmlayer(road_dist, "Distance to roads"), 
+  tmlayer(crop_dist, "Distance to crops"), ncol = 3)
 ```
+
+### Hunter risk layer
+
+Model = Habitat + Road Dist + Rugged + (Road Dist * Habitat) 
+*(Gaynor et al. 2021)*
+
+```{r}
+#Create fake data
+set.seed(42)
+dummy_data <- data.frame(used = rbinom(30, 1, 0.4),
+                         vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = row.num), 
+                                              levels = c("Shrub", "Woodland", "Grassland")),
+                         road_dist = c(runif(30, min = 0, max = 2500)),
+                         ruggedness = c(runif(30, min = 0, max = 300))) 
+
+#Recreate formula from Gaynor et. al 2021 and specify interactions:
+mod <- glm(formula = used ~ vegetation + road_dist + ruggedness + road_dist*vegetation, 
+                  data = dummy_data, family = binomial(link = "logit"))
+
+#Create a new model to update the coefficients:
+mod_real <- mod
+
+#Manually create vector of REAL coefficients from Gaynor et al. 2021:
+mod_real$coefficients <-c(-3.73, 2.08, 2.75, -2.23, 0.15, 1.53, 1.74)
+```
+
+
+```{r}
+#Create hunter risk layer from Gaynor et al. 2021 model
+
+#rescale environmental layers 
+road_sc <- rescale(road_dist)
+tri_sc <- rescale(tri)
+
+#stack layers
+hunt_stack <- brick(veg, road_sc, tri_sc) 
+names(hunt_stack) <- c("vegetation", "road_dist", "ruggedness")
+plot(hunt_stack, nc = 3)
+
+#convert to matrix 
+hunt_values <- values(hunt_stack)
+head(hunt_values)
+
+#vegetation class key
+veg_table <- unique(data.frame(vegetation = c(1,2,3),
+                               vegetation_class = as.factor(c("Shrub","Woodland","Grassland"))))
+
+#create dataframe with categorical values for prediction
+hunt_vals <- hunt_values %>% data.frame %>% 
+  mutate(rid = 1:length(vegetation), nick_name = "dummy") %>% 
+  merge(veg_table, all.x=TRUE) %>% #merge categorical names
+  dplyr::select(-vegetation) %>% #drop numeric
+  rename(vegetation = vegetation_class) %>% #keep factor class
+  arrange(rid) #add row ID
+str(hunt_vals)
+
+#predict values
+hunter_prediction <- predict(mod_real, newdata = hunt_vals, allow.new.levels=TRUE)
+
+#fill raster with values
+hunter_risk <- hunt_stack[[3]] %>% setValues(hunter_prediction)
+plot(hunter_risk)
+
+#create mask for where hunters won't hunt (150m of development)
+dev_mask <- raster::buffer(dev, width = 150)
+hunter_risk <- mask(hunter_risk, dev_mask, inverse=TRUE) #remove dev from hunter risk
+```
+
+```{r}
+#crop to hopland boundary to see if its accurate
+hrec_crop <- crop(hunter_risk, extent(hopland))
+hrec_hunter_risk <- mask(hrec_crop, st_zm(hopland))
+
+hunter <- tm_shape(hrec_hunter_risk) + 
+            tm_raster(style = "cont", palette = "Blues") + 
+            tm_shape(hopland) + tm_borders(col = "black") + 
+            tm_layout(legend.show = F, panel.show=T, panel.labels="HREC Hunter Risk")
+```
+
+
+### Lion Risk layer
+
+Model = Veg Type + Distance to Cropland
+*(Gaynor et al. 2021)*
+
+```{r}
+#Create fake data
+set.seed(42)
+dummy_data2 <- data.frame(used = rbinom(30, 1, 0.4),
+                         vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = row.num), 
+                                              levels = c("Shrub", "Woodland", "Grassland")),
+                         elev_dist = c(runif(30, min = 0, max = 2500))) 
+
+#Recreate formula from Gaynor et. al 2021 and specify interactions:
+mod2 <- glm(formula = used ~ vegetation + elev_dist, 
+                  data = dummy_data2, family = binomial(link = "logit"))
+
+#Create a new model to update the coefficients:
+mod_real2 <- mod2
+
+#Manually create vector of REAL coefficients from Gaynor et al. 2021:
+mod_real2$coefficients <-c(-5.84, -2.53, -1.02, -1.32)
+```
+
+
+```{r}
+#Create lion risk layer from Gaynor et al. 2021 model
+
+#create crop distance layer (as proxy for BLM distance)
+elev_sc <- rescale(crop_dist)
+elev_inverse = elev_sc
+values(elev_inverse) <- 1 - values(elev_sc) 
+plot(elev_inverse)
+
+#stack layers
+lion_stack <- brick(veg, elev_inverse) 
+names(lion_stack) <- c("vegetation", "elev_dist")
+plot(lion_stack, nc = 2)
+
+#convert to matrix 
+lion_values <- values(lion_stack)
+head(lion_values)
+
+#create dataframe with categorical values for prediction
+lion_vals <- lion_values %>% data.frame %>% 
+  mutate(rid = 1:length(vegetation), nick_name = "dummy") %>% 
+  merge(veg_table, all.x=TRUE) %>% #merge categorical names from before
+  dplyr::select(-vegetation) %>% #drop numeric
+  rename(vegetation = vegetation_class) %>% #keep factor class
+  arrange(rid) #add row ID
+str(lion_vals)
+
+#predict values
+lion_prediction <- predict(mod_real2, newdata = lion_vals, allow.new.levels=TRUE)
+
+#fill raster with values
+lion_risk <- lion_stack[[2]] %>% setValues(lion_prediction)
+plot(lion_risk)
+```
+
+```{r}
+#crop to hopland boundary to see if its accurate
+lion_crop <- crop(lion_risk, extent(hopland))
+hrec_lion_risk <- mask(lion_crop, st_zm(hopland))
+
+lion <- tm_shape(hrec_lion_risk) + 
+          tm_raster(style = "cont", palette = "-YlOrRd") + 
+          tm_shape(hopland) + tm_borders(col = "black") + 
+          tm_layout(legend.show = F, panel.show=T, panel.labels="HREC Lion Risk")
+```
+
+### HREC plots
+```{r}
+tmap_arrange(hunter, lion)
+```
+
 
 ### Models
 ```{r}
-envt <- stack(elev, slope, dev_dist, road_dist, crop_dist, 
-              grass_dist, forest_dist, shrub_dist, water_dist, 
-              lion, hunter)
-names(envt) <- c("elev", "slope", "dev_dist","road_dist","crop_dist",
-                 "grass_dist","forest_dist","shrub_dist","water_dist",
-                 "lion","hunter")
+envt <- stack(elev, tri, veg, dev_dist, road_dist, crop_dist, hunter_risk, lion_risk)
+names(envt) <- c("Elevation", "Ruggedness", "Vegetation Type", "Distance to Development",
+                 "Distance to Roads","Distance to Agriculture", "Hunter risk", "Lion risk")
 save(envt, file = "data_objects/envt.Rdata")
 ```
-

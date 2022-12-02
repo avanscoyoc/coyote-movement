@@ -1,7 +1,7 @@
 ---
 title: "Full_mods"
 author: "Amy Van Scoyoc"
-date: "8/14/2022"
+date: "12/1/2022"
 output: github_document
 ---
 
@@ -15,6 +15,7 @@ library(raster) #for importing and extracting covariates
 library(lme4) #for glmer models
 library(performance) #check models
 library(jtools) #plot estimates
+library(sjPlot)
 ```
 
 ```{r}
@@ -68,17 +69,14 @@ for(i in 1:length(coyote_ids)){
 coyote_full <- availables %>% 
   do.call(rbind,.) %>% 
   rbind(coyote_full, .) %>%  #add covariates
-  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+  mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
+         hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_full$ID,coyote_full$Used)
@@ -90,50 +88,36 @@ coyote_full$ID <- as_factor(coyote_full$ID) #make sure ID is treated as a factor
 
 coyote_cor <- coyote_full
 st_geometry(coyote_cor) <- NULL
-cor(coyote_cor[,6:16])
-#remove water in full model (correlated w/ crop)
+cor(coyote_cor[,8:12])
+#remove elevation in full model (correlated w/ crop)
 ```
 
 ###Full models 
 ```{r}
-full_mod <- glmer(Used ~ slope.s + crop_dist.s + grass_dist.s + forest_dist.s + 
-                    shrub_dist.s + road_dist.s + dev_dist.s + lion.s + hunter.s + (1|ID), 
+full_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID), 
                   data = coyote_full, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-full_mod_alt <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
-                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
-                  data = coyote_full, family=binomial(link="logit")) #note crop-elev are correlated
-#save(full_mod_alt, file = "data_objects/full_mod.Rdata")
+#save(full_mod, file = "data_objects/full_mod.Rdata")
+summary(full_mod)
 
-reward_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + (1|ID), 
-                  data = coyote_full, family=binomial(link="logit")) #excluded water (correlated w/ crop)
-
-risk_mod <- glmer(Used ~ shrub_dist.s + elev.s + slope.s + road_dist.s + dev_dist.s + (1|ID), 
-                  data = coyote_full, family=binomial(link="logit"))
-
-risk_mod_alt <- glmer(Used ~ lion.s + hunter.s + dev_dist.s + (1|ID), 
-                  data = coyote_full, family=binomial(link="logit"))
-
-model_performance(full_mod)
-model_performance(full_mod_alt)
-model_performance(reward_mod)
-model_performance(risk_mod)
-model_performance(risk_mod_alt)
+library(lme4)	
+# plot probability curve of fixed effects
+plot_model(full_mod,axis.labels=c("Ruggedness","Vegetation Type", "Distance to Road",
+                                  "Distance to Development", "Distance to Agriculture",
+                                  "Hunter Risk", "Lion Risk"),
+                   show.values=TRUE, show.p=TRUE)
 ```
 
 ```{r}
-#Best model
-jtools::plot_summs(full_mod_alt, reward_mod, risk_mod, scale = TRUE, 
-           model.names = c("Full", "Reward", "Risk"),
-           coefs = c("Crop dist."="crop_dist.s",
-                     "Pasture dist."="grass_dist.s",
-                     "Forest dist."="forest_dist.s",
-                     "Shrub dist."="shrub_dist.s",
-                     "Development dist."="dev_dist.s",
-                     "Road dist."="road_dist.s",
-                     "Slope"="slope.s",
-                     "Elevation"="elev.s"),
-           colors = c("black","blue","orange")) 
+#Plot
+jtools::plot_summs(full_mod, scale = TRUE, 
+           model.names = "Full",
+           coefs = c("tri" = "Ruggedness",
+                     "veg" = "Vegetation Type",
+                     "road_dist" = "Distance to Road",
+                     "dev_dist" = "Distance to Development",
+                     "crop_dist" = "Distance to Agriculture"),
+           colors = c("black")) 
 
 ```
 
