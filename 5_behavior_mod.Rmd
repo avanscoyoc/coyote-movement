@@ -74,17 +74,12 @@ for(i in 1:length(coyote_ids)){
 coyote_rest <- availables %>% 
   do.call(rbind,.) %>% 
   rbind(coyote_rest, .) %>% 
-  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+  mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_rest$ID,coyote_rest$Used)
@@ -140,17 +135,12 @@ for(i in 1:length(coyote_ids)){
 coyote_forage <- availables %>% 
   do.call(rbind,.) %>% 
   rbind(coyote_forage, .) %>% 
-  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+  mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_forage$ID,coyote_forage$Used)
@@ -206,17 +196,12 @@ for(i in 1:length(coyote_ids)){
 coyote_travel <- availables %>% 
   do.call(rbind,.) %>% 
   rbind(coyote_travel, .) %>% 
-  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+  mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_travel$ID,coyote_travel$Used)
@@ -228,19 +213,16 @@ table(coyote_travel$ID,coyote_travel$Used)
 #import best full model 
 load(here("data_objects","full_mod.Rdata"))
 
-rest_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
-                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+rest_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID), 
                   data = coyote_rest, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-forage_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
-                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+forage_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID),
                   data = coyote_forage, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-travel_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
-                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+travel_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID),
                   data = coyote_travel, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-model_performance(full_mod_alt)
+model_performance(full_mod)
 model_performance(rest_mod)
 model_performance(forage_mod)
 model_performance(travel_mod)
@@ -248,14 +230,12 @@ model_performance(travel_mod)
 
 ```{r}
 #Best model
-jtools::plot_summs(full_mod_alt, rest_mod, forage_mod, travel_mod, scale = TRUE, 
+jtools::plot_summs(full_mod, rest_mod, forage_mod, travel_mod, scale = TRUE, 
            model.names = c("Full", "Resting", "Foraging", "Traveling"),
-           coefs = c("Crop dist."="crop_dist.s",
-                     "Pasture dist."="grass_dist.s",
-                     "Forest dist."="forest_dist.s",
-                     "Shrub dist."="shrub_dist.s",
-                     "Development dist."="dev_dist.s",
-                     "Road dist."="road_dist.s",
-                     "Slope"="slope.s"),
+           coefs = c("Ruggedness" = "tri",
+                     "Vegetation Type" = "veg",
+                     "Distance to Road" = "road_dist",
+                     "Distance to Development" = "dev_dist",
+                     "Distance to Agriculture" = "crop_dist"),
            colors = c("black","#CC9900","#339999","#006633")) 
 ```
