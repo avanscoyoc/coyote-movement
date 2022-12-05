@@ -19,7 +19,7 @@ library(tmap) #plots
 
 ```{r}
 #import landcover layer
-lc <- raster(here("data_covariates", "covariates_from_GEE", "HREC_landcover_extended.tif"))
+lc <- raster(here("data_covariates", "covariates_from_GEE", "HREC_landcover_extended_2016.tiff"))
 #import elevation layer
 elev <- raster(here("data_covariates", "covariates_from_GEE", "HREC_elevation_extended.tif"))
 #create ruggedness (Terrain Ruggedness Index) layer
@@ -111,7 +111,7 @@ Model = Habitat + Road Dist + Rugged + (Road Dist * Habitat)
 #Create fake data
 set.seed(42)
 dummy_data <- data.frame(used = rbinom(30, 1, 0.4),
-                         vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = row.num), 
+                         vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = 10), 
                                               levels = c("Shrub", "Woodland", "Grassland")),
                          road_dist = c(runif(30, min = 0, max = 2500)),
                          ruggedness = c(runif(30, min = 0, max = 300))) 
@@ -162,22 +162,32 @@ hunter_prediction <- predict(mod_real, newdata = hunt_vals, allow.new.levels=TRU
 
 #fill raster with values
 hunter_risk <- hunt_stack[[3]] %>% setValues(hunter_prediction)
-plot(hunter_risk)
 
 #create mask for where hunters won't hunt (150m of development)
 dev_mask <- raster::buffer(dev, width = 150)
 hunter_risk <- mask(hunter_risk, dev_mask, inverse=TRUE) #remove dev from hunter risk
+
+plot(hunter_risk)
 ```
 
 ```{r}
+hunt_rsf <- exp(hunter_risk)/max(values(exp(hunter_risk)), na.rm = TRUE)
+(breaks <- quantile(hunter_prediction, seq(0,1,1/10), na.rm = TRUE))
+hunter_discrete <- cut(hunter_prediction, breaks = breaks, label = 1:10)
+hunter_final <- hunt_rsf %>% setValues(hunter_discrete)
+plot(hunter_final)
+```
+
+
+```{r}
 #crop to hopland boundary to see if its accurate
-hrec_crop <- crop(hunter_risk, extent(hopland))
+hrec_crop <- crop(hunter_final, extent(hopland))
 hrec_hunter_risk <- mask(hrec_crop, st_zm(hopland))
 
 hunter <- tm_shape(hrec_hunter_risk) + 
             tm_raster(style = "cont", palette = "Blues") + 
             tm_shape(hopland) + tm_borders(col = "black") + 
-            tm_layout(legend.show = F, panel.show=T, panel.labels="HREC Hunter Risk")
+            tm_layout(legend.show = T, panel.show=T, panel.labels="HREC Hunter Risk")
 ```
 
 
@@ -190,7 +200,7 @@ Model = Veg Type + Distance to Cropland
 #Create fake data
 set.seed(42)
 dummy_data2 <- data.frame(used = rbinom(30, 1, 0.4),
-                         vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = row.num), 
+                         vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = 10), 
                                               levels = c("Shrub", "Woodland", "Grassland")),
                          elev_dist = c(runif(30, min = 0, max = 2500))) 
 
@@ -218,7 +228,6 @@ plot(elev_inverse)
 #stack layers
 lion_stack <- brick(veg, elev_inverse) 
 names(lion_stack) <- c("vegetation", "elev_dist")
-plot(lion_stack, nc = 2)
 
 #convert to matrix 
 lion_values <- values(lion_stack)
@@ -238,12 +247,21 @@ lion_prediction <- predict(mod_real2, newdata = lion_vals, allow.new.levels=TRUE
 
 #fill raster with values
 lion_risk <- lion_stack[[2]] %>% setValues(lion_prediction)
+
+#remove dev from lion risk
+lion_risk <- mask(lion_risk, dev_mask, inverse=TRUE)
+
 plot(lion_risk)
 ```
 
 ```{r}
+lion_final <- exp(lion_risk)/max(values(exp(lion_risk)), na.rm = TRUE)
+plot(lion_final)
+```
+
+```{r}
 #crop to hopland boundary to see if its accurate
-lion_crop <- crop(lion_risk, extent(hopland))
+lion_crop <- crop(lion_final, extent(hopland))
 hrec_lion_risk <- mask(lion_crop, st_zm(hopland))
 
 lion <- tm_shape(hrec_lion_risk) + 
