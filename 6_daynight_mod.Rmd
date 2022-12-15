@@ -74,17 +74,16 @@ for(i in 1:length(coyote_ids)){
 coyote_day <- availables %>% 
   do.call(rbind,.) %>% 
   rbind(coyote_day, .) %>% 
-  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+ mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial"), method = 'simple', factors = TRUE), 
+         dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
+         hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE)) %>% 
+  left_join(.,envt[[3]]@data@attributes[[1]], by = c('veg' = 'ID')) %>%  #join categorical vegetation type names
+  dplyr::select(-veg) %>% rename("veg" = "cover") #rename categorical veg column
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_day$ID,coyote_day$Used)
@@ -140,17 +139,16 @@ for(i in 1:length(coyote_ids)){
 coyote_night <- availables %>% 
   do.call(rbind,.) %>% 
   rbind(coyote_night, .) %>% 
-  mutate(elev.s = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         slope.s = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         dev_dist.s = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         road_dist.s = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist.s = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         grass_dist.s = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         forest_dist.s = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         shrub_dist.s = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         water_dist.s = raster::extract(envt[[9]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion.s = raster::extract(envt[[10]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         hunter.s = raster::extract(envt[[11]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+ mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial"), method = 'simple', factors = TRUE), 
+         dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
+         hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE)) %>% 
+  left_join(.,envt[[3]]@data@attributes[[1]], by = c('veg' = 'ID')) %>%  #join categorical vegetation type names
+  dplyr::select(-veg) %>% rename("veg" = "cover") #rename categorical veg column
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_night$ID,coyote_night$Used)
@@ -162,30 +160,29 @@ table(coyote_night$ID,coyote_night$Used)
 #import best full model 
 load(here("data_objects","full_mod.Rdata"))
 
-day_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
-                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+day_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_day, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-night_mod <- glmer(Used ~ crop_dist.s + grass_dist.s + forest_dist.s + shrub_dist.s + 
-                        + slope.s + road_dist.s + dev_dist.s +(1|ID), 
+night_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_night, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-model_performance(full_mod_alt)
+model_performance(full_mod)
 model_performance(day_mod)
 model_performance(night_mod)
 ```
 
 ```{r}
 #Best model
-jtools::plot_summs(full_mod_alt, day_mod, night_mod, scale = TRUE, 
+jtools::plot_summs(full_mod, day_mod, night_mod, scale = TRUE, 
            model.names = c("Full", "Day", "Night"),
-           coefs = c("Crop dist."="crop_dist.s",
-                     "Pasture dist."="grass_dist.s",
-                     "Forest dist."="forest_dist.s",
-                     "Shrub dist."="shrub_dist.s",
-                     "Development dist."="dev_dist.s",
-                     "Road dist."="road_dist.s",
-                     "Slope"="slope.s"),
+           coefs = c("Ruggedness" = "tri",
+                     "Shrubland" = "vegShrub",
+                     "Woodland" = "vegWoodland",
+                     "Distance to Road" = "road_dist",
+                     "Distance to Development" = "dev_dist", 
+                     "Distance to Agriculture" = "crop_dist",
+                     "Hunter Risk" = "hunter_risk",
+                     "Lion Risk" = "lion_risk"),
            colors = c("black","red","purple")) 
 ```
 

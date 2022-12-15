@@ -71,12 +71,14 @@ coyote_full <- availables %>%
   rbind(coyote_full, .) %>%  #add covariates
   mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial"), method = 'simple', factors = TRUE), 
          dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
          hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE)) %>% 
+  left_join(.,envt[[3]]@data@attributes[[1]], by = c('veg' = 'ID')) %>%  #join categorical vegetation type names
+  dplyr::select(-veg) %>% rename("veg" = "cover") #rename categorical veg column
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_full$ID,coyote_full$Used)
@@ -88,36 +90,23 @@ coyote_full$ID <- as_factor(coyote_full$ID) #make sure ID is treated as a factor
 
 coyote_cor <- coyote_full
 st_geometry(coyote_cor) <- NULL
-cor(coyote_cor[,8:12])
+cor(coyote_cor[,7:13])
 #remove elevation in full model (correlated w/ crop)
 ```
 
 ###Full models 
 ```{r}
-full_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID), 
+full_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_full, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-#save(full_mod, file = "data_objects/full_mod.Rdata")
+save(full_mod, file = "data_objects/full_mod.Rdata")
 summary(full_mod)
 
 library(lme4)	
 # plot probability curve of fixed effects
-plot_model(full_mod,axis.labels=c("Ruggedness","Vegetation Type", "Distance to Road",
+plot_model(full_mod,axis.labels=c("Ruggedness", "Woodland","Grassland", "Distance to Road",
                                   "Distance to Development", "Distance to Agriculture",
                                   "Hunter Risk", "Lion Risk"),
                    show.values=TRUE, show.p=TRUE)
-```
-
-```{r}
-#Plot
-jtools::plot_summs(full_mod, scale = TRUE, 
-           model.names = "Full",
-           coefs = c("tri" = "Ruggedness",
-                     "veg" = "Vegetation Type",
-                     "road_dist" = "Distance to Road",
-                     "dev_dist" = "Distance to Development",
-                     "crop_dist" = "Distance to Agriculture"),
-           colors = c("black")) 
-
 ```
 

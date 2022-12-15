@@ -138,7 +138,7 @@ tri_sc <- rescale(tri)
 #stack layers
 hunt_stack <- brick(veg, road_sc, tri_sc) 
 names(hunt_stack) <- c("vegetation", "road_dist", "ruggedness")
-plot(hunt_stack, nc = 3)
+#plot(hunt_stack, nc = 3)
 
 #convert to matrix 
 hunt_values <- values(hunt_stack)
@@ -163,10 +163,6 @@ hunter_prediction <- predict(mod_real, newdata = hunt_vals, allow.new.levels=TRU
 #fill raster with values
 hunter_risk <- hunt_stack[[3]] %>% setValues(hunter_prediction)
 
-#create mask for where hunters won't hunt (150m of development)
-dev_mask <- raster::buffer(dev, width = 150)
-hunter_risk <- mask(hunter_risk, dev_mask, inverse=TRUE) #remove dev from hunter risk
-
 plot(hunter_risk)
 ```
 
@@ -174,14 +170,22 @@ plot(hunter_risk)
 hunt_rsf <- exp(hunter_risk)/max(values(exp(hunter_risk)), na.rm = TRUE)
 (breaks <- quantile(hunter_prediction, seq(0,1,1/10), na.rm = TRUE))
 hunter_discrete <- cut(hunter_prediction, breaks = breaks, label = 1:10)
-hunter_final <- hunt_rsf %>% setValues(hunter_discrete)
-plot(hunter_final)
+hunter <- hunt_rsf %>% setValues(hunter_discrete)
+
+#create mask for where hunters won't hunt (150m of development)
+dev_mask <- raster::buffer(dev, width = 150)
+hunter_risk <- mask(hunter, dev_mask, inverse=TRUE) #remove dev from hunter risk
+
+# replacing NA's by zero
+hunter_risk[is.na(hunter_risk[])] <- 0 
+
+plot(hunter_risk)
 ```
 
 
 ```{r}
 #crop to hopland boundary to see if its accurate
-hrec_crop <- crop(hunter_final, extent(hopland))
+hrec_crop <- crop(hunter_risk, extent(hopland))
 hrec_hunter_risk <- mask(hrec_crop, st_zm(hopland))
 
 hunter <- tm_shape(hrec_hunter_risk) + 
@@ -202,10 +206,10 @@ set.seed(42)
 dummy_data2 <- data.frame(used = rbinom(30, 1, 0.4),
                          vegetation = factor(rep(c("Shrub", "Woodland", "Grassland"), each = 10), 
                                               levels = c("Shrub", "Woodland", "Grassland")),
-                         elev_dist = c(runif(30, min = 0, max = 2500))) 
+                         inv_crop_dist = c(runif(30, min = 0, max = 2500))) 
 
 #Recreate formula from Gaynor et. al 2021 and specify interactions:
-mod2 <- glm(formula = used ~ vegetation + elev_dist, 
+mod2 <- glm(formula = used ~ vegetation + inv_crop_dist, 
                   data = dummy_data2, family = binomial(link = "logit"))
 
 #Create a new model to update the coefficients:
@@ -220,14 +224,14 @@ mod_real2$coefficients <-c(-5.84, -2.53, -1.02, -1.32)
 #Create lion risk layer from Gaynor et al. 2021 model
 
 #create crop distance layer (as proxy for BLM distance)
-elev_sc <- rescale(crop_dist)
-elev_inverse = elev_sc
-values(elev_inverse) <- 1 - values(elev_sc) 
-plot(elev_inverse)
+crop_sc <- rescale(crop_dist)
+crop_inverse = crop_sc
+values(crop_inverse) <- 1 - values(crop_sc) 
+plot(crop_inverse)
 
 #stack layers
-lion_stack <- brick(veg, elev_inverse) 
-names(lion_stack) <- c("vegetation", "elev_dist")
+lion_stack <- brick(veg, crop_inverse) 
+names(lion_stack) <- c("vegetation", "inv_crop_dist")
 
 #convert to matrix 
 lion_values <- values(lion_stack)
@@ -248,26 +252,30 @@ lion_prediction <- predict(mod_real2, newdata = lion_vals, allow.new.levels=TRUE
 #fill raster with values
 lion_risk <- lion_stack[[2]] %>% setValues(lion_prediction)
 
+plot(lion_risk)
+```
+
+```{r}
+lion <- exp(lion_risk)/max(values(exp(lion_risk)), na.rm = TRUE)
+
 #remove dev from lion risk
-lion_risk <- mask(lion_risk, dev_mask, inverse=TRUE)
+lion_risk <- mask(lion, dev_mask, inverse=TRUE)
+
+# replacing NA's by zero
+lion_risk[is.na(lion_risk[])] <- 0 
 
 plot(lion_risk)
 ```
 
 ```{r}
-lion_final <- exp(lion_risk)/max(values(exp(lion_risk)), na.rm = TRUE)
-plot(lion_final)
-```
-
-```{r}
 #crop to hopland boundary to see if its accurate
-lion_crop <- crop(lion_final, extent(hopland))
+lion_crop <- crop(lion_risk, extent(hopland))
 hrec_lion_risk <- mask(lion_crop, st_zm(hopland))
 
 lion <- tm_shape(hrec_lion_risk) + 
-          tm_raster(style = "cont", palette = "-YlOrRd") + 
+          tm_raster(style = "cont", palette = "YlOrRd") + 
           tm_shape(hopland) + tm_borders(col = "black") + 
-          tm_layout(legend.show = F, panel.show=T, panel.labels="HREC Lion Risk")
+          tm_layout(legend.show = T, panel.show=T, panel.labels="HREC Lion Risk")
 ```
 
 ### HREC plots

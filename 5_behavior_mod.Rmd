@@ -76,10 +76,14 @@ coyote_rest <- availables %>%
   rbind(coyote_rest, .) %>% 
   mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial"), method = 'simple', factors = TRUE), 
          dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
+         hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE)) %>% 
+  left_join(.,envt[[3]]@data@attributes[[1]], by = c('veg' = 'ID')) %>%  #join categorical vegetation type names
+  dplyr::select(-veg) %>% rename("veg" = "cover") #rename categorical veg column
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_rest$ID,coyote_rest$Used)
@@ -137,10 +141,14 @@ coyote_forage <- availables %>%
   rbind(coyote_forage, .) %>% 
   mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial"), method = 'simple', factors = TRUE), 
          dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
+         hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE)) %>% 
+  left_join(.,envt[[3]]@data@attributes[[1]], by = c('veg' = 'ID')) %>%  #join categorical vegetation type names
+  dplyr::select(-veg) %>% rename("veg" = "cover") #rename categorical veg column
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_forage$ID,coyote_forage$Used)
@@ -198,10 +206,14 @@ coyote_travel <- availables %>%
   rbind(coyote_travel, .) %>% 
   mutate(elev = raster::extract(envt[[1]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          tri = raster::extract(envt[[2]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         veg = raster::extract(envt[[3]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         veg = raster::extract(envt[[3]], as(., "Spatial"), method = 'simple', factors = TRUE), 
          dev_dist = raster::extract(envt[[4]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
          road_dist = raster::extract(envt[[5]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
-         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE))
+         crop_dist = raster::extract(envt[[6]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE), 
+         hunter_risk = raster::extract(envt[[7]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE),
+         lion_risk = raster::extract(envt[[8]], as(., "Spatial")) %>% scale(., center = TRUE, scale = TRUE)) %>% 
+  left_join(.,envt[[3]]@data@attributes[[1]], by = c('veg' = 'ID')) %>%  #join categorical vegetation type names
+  dplyr::select(-veg) %>% rename("veg" = "cover") #rename categorical veg column
 
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_travel$ID,coyote_travel$Used)
@@ -213,15 +225,15 @@ table(coyote_travel$ID,coyote_travel$Used)
 #import best full model 
 load(here("data_objects","full_mod.Rdata"))
 
-rest_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID), 
+rest_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_rest, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-forage_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID),
+forage_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_forage, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-travel_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + (1|ID),
+travel_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_travel, family=binomial(link="logit")) #drop elev (correlated w/ crop)
-
+summary(travel_mod)
 model_performance(full_mod)
 model_performance(rest_mod)
 model_performance(forage_mod)
@@ -233,9 +245,12 @@ model_performance(travel_mod)
 jtools::plot_summs(full_mod, rest_mod, forage_mod, travel_mod, scale = TRUE, 
            model.names = c("Full", "Resting", "Foraging", "Traveling"),
            coefs = c("Ruggedness" = "tri",
-                     "Vegetation Type" = "veg",
+                     "Shrubland" = "vegShrub",
+                     "Woodland" = "vegWoodland",
                      "Distance to Road" = "road_dist",
-                     "Distance to Development" = "dev_dist",
-                     "Distance to Agriculture" = "crop_dist"),
+                     "Distance to Development" = "dev_dist", 
+                     "Distance to Agriculture" = "crop_dist",
+                     "Hunter Risk" = "hunter_risk",
+                     "Lion Risk" = "lion_risk"),
            colors = c("black","#CC9900","#339999","#006633")) 
 ```
