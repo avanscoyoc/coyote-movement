@@ -153,6 +153,12 @@ coyote_night <- availables %>%
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_night$ID,coyote_night$Used)
 ```
+```{r}
+# Save data objects
+save(coyote_day, file = "data_objects/coyote_day.Rdata")
+save(coyote_night, file = "data_objects/coyote_night.Rdata")
+```
+
 
 
 ### DayNight Mods
@@ -172,17 +178,23 @@ model_performance(night_mod)
 ```
 
 ```{r}
+save(day_mod, file = "data_objects/day_mod.Rdata")
+save(night_mod, file = "data_objects/night_mod.Rdata")
+```
+
+
+```{r}
 #Best model
 jtools::plot_summs(full_mod, day_mod, night_mod, scale = TRUE, 
            model.names = c("Full", "Day", "Night"),
            coefs = c("Ruggedness" = "tri",
                      "Shrubland" = "vegShrub",
                      "Woodland" = "vegWoodland",
-                     "Distance to Road" = "road_dist",
-                     "Distance to Development" = "dev_dist", 
-                     "Distance to Agriculture" = "crop_dist",
-                     "Hunter Risk" = "hunter_risk",
-                     "Lion Risk" = "lion_risk"),
+                     "Road Dist" = "road_dist",
+                     "Development Dist." = "dev_dist", 
+                     "Agriculture Dist." = "crop_dist",
+                     "Lethal Removal Risk" = "hunter_risk",
+                     "Mountain Lion Risk" = "lion_risk"),
            colors = c("black","red","purple")) 
 ```
 

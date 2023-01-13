@@ -89,6 +89,7 @@ coyote_rest <- availables %>%
 table(coyote_rest$ID,coyote_rest$Used)
 ```
 
+
 ### Foraging top models
 
 ### Calculate Forage Home Ranges (Kernel Utilization Distribution)
@@ -221,6 +222,8 @@ table(coyote_travel$ID,coyote_travel$Used)
 
 
 ### Behavior Mods
+
+
 ```{r}
 #import best full model 
 load(here("data_objects","full_mod.Rdata"))
@@ -241,16 +244,24 @@ model_performance(travel_mod)
 ```
 
 ```{r}
+save(rest_mod, file = "data_objects/rest_mod.Rdata")
+save(forage_mod, file = "data_objects/forage_mod.Rdata")
+save(travel_mod, file = "data_objects/travel_mod.Rdata")
+```
+
+
+
+```{r}
 #Best model
 jtools::plot_summs(full_mod, rest_mod, forage_mod, travel_mod, scale = TRUE, 
            model.names = c("Full", "Resting", "Foraging", "Traveling"),
            coefs = c("Ruggedness" = "tri",
                      "Shrubland" = "vegShrub",
                      "Woodland" = "vegWoodland",
-                     "Distance to Road" = "road_dist",
-                     "Distance to Development" = "dev_dist", 
-                     "Distance to Agriculture" = "crop_dist",
-                     "Hunter Risk" = "hunter_risk",
-                     "Lion Risk" = "lion_risk"),
+                     "Road Dist." = "road_dist",
+                     "Development Dist." = "dev_dist", 
+                     "Agriculture Dist" = "crop_dist",
+                     "Lethal Removal Risk" = "hunter_risk",
+                     "Mountain Lion Risk" = "lion_risk"),
            colors = c("black","#CC9900","#339999","#006633")) 
 ```

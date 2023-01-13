@@ -36,11 +36,11 @@ coyote_sp <- coyote %>%
 
 #create Kernel Utilization Distributions 
 kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
-coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95 , unout = "km2")
+coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95)
 
 #HR area (km2)
 kernel.area(kud_all, percent = 95) %>% 
-  pivot_longer(1:8,names_to = "ID", values_to = "Area (km^2)")
+  pivot_longer(1:8,names_to = "ID", values_to = "Area (m^2)")
 ```
 
 ### Sample available points in Home Ranges
@@ -84,6 +84,11 @@ coyote_full <- availables %>%
 table(coyote_full$ID,coyote_full$Used)
 ```
 
+```{r}
+# Save data object
+save(coyote_full, file = "data_objects/coyote_full.Rdata")
+```
+
 ### Check covariates for colinearity
 ```{r}
 coyote_full$ID <- as_factor(coyote_full$ID) #make sure ID is treated as a factor
@@ -101,12 +106,14 @@ full_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_r
 
 save(full_mod, file = "data_objects/full_mod.Rdata")
 summary(full_mod)
+```
 
-library(lme4)	
-# plot probability curve of fixed effects
-plot_model(full_mod,axis.labels=c("Ruggedness", "Woodland","Grassland", "Distance to Road",
-                                  "Distance to Development", "Distance to Agriculture",
-                                  "Hunter Risk", "Lion Risk"),
-                   show.values=TRUE, show.p=TRUE)
+
+```{r}
+likelihoods <- c(93648.15, 96632.17, 93648.15, 94169.25, 96632.17, 93648.15, 96632.17, 94169.25, 93648.15, 93648.15, 96632.17, 93648.15, 93648.15, 93648.15, 96632.17, 96632.17, 93648.15, 93648.15, 94169.25, 93648.15, 93648.15, 93648.15, 93648.15, 93648.15, 93650.15)
+
+max(likelihoods)
+mean(likelihoods)
+sd(likelihoods)
 ```
 

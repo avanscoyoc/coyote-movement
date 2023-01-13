@@ -1,0 +1,150 @@
+---
+title: "7_model_comparison"
+author: "Amy Van Scoyoc"
+date: "1/12/2023"
+output: html_document
+---
+
+
+### Model table 
+```{r}
+load(here("data_objects","full_mod.Rdata"))
+load(here("data_objects","rest_mod.Rdata"))
+load(here("data_objects","forage_mod.Rdata"))
+load(here("data_objects","travel_mod.Rdata"))
+load(here("data_objects","day_mod.Rdata"))
+load(here("data_objects","night_mod.Rdata"))
+
+sjPlot::tab_model(full_mod, rest_mod, forage_mod, travel_mod, day_mod, night_mod, 
+          dv.labels = c("Full model","Rest","Forage","Travel", "Day", "Night"),
+          pred.labels = c("Intercept", "Ruggedness", "Shrubland", "Woodland",
+                     "Road distance", "Development distance", "Agriculture distance",
+                     "Lethal Removal Risk", "Mountain Lion Risk"),
+          show.re.var = FALSE, show.ngroups = FALSE, show.icc = FALSE,
+          string.pred = "Covariates", string.ci = "CI", p.style = "stars")
+
+?tab_model
+```
+
+
+### Check variable importance
+```{r}
+library(MuMIn)
+```
+
+### Load Datasets
+```{r}
+load(here("data_objects","coyote_full.Rdata"))
+load(here("data_objects","coyote_day.Rdata"))
+load(here("data_objects","coyote_night.Rdata"))
+load(here("data_objects","coyote_rest.Rdata"))
+load(here("data_objects","coyote_forage.Rdata"))
+load(here("data_objects","coyote_travel.Rdata"))
+```
+
+
+### Used vs. Available table
+```{r}
+rbind(table(coyote_full$Used),
+           table(coyote_rest$Used),
+           table(coyote_forage$Used),
+           table(coyote_travel$Used),
+           table(coyote_day$Used),
+           table(coyote_night$Used)) %>% 
+  as.data.frame() %>% rename(Available = 1, Used = 2) %>% 
+  mutate(Model = c("Full", "Rest", "Forage", "Travel", "Day", "Night")) %>% 
+  dplyr::select(Model, Used, Available) %>% tab_df()
+
+```
+
+
+### Fit Anthropogenic and natural features models
+```{r}
+# Global model
+global <- load(here("data_objects","full_mod.Rdata"))
+
+# Full data
+anthro_full <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                  data = coyote_full, family=binomial(link="logit")) 
+nat_full <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                  data = coyote_full, family=binomial(link="logit")) 
+
+# Day-Night data
+anthro_day <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                  data = coyote_day, family=binomial(link="logit")) 
+nat_day <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                  data = coyote_day, family=binomial(link="logit")) 
+anthro_night <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                  data = coyote_night, family=binomial(link="logit")) 
+nat_night <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                  data = coyote_night, family=binomial(link="logit")) 
+
+# Behavior data
+anthro_rest <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                  data = coyote_rest, family=binomial(link="logit")) 
+nat_rest <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                  data = coyote_rest, family=binomial(link="logit")) 
+anthro_forage <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                  data = coyote_forage, family=binomial(link="logit")) 
+nat_forage <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                  data = coyote_forage, family=binomial(link="logit"))
+anthro_travel <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                  data = coyote_travel, family=binomial(link="logit")) 
+nat_travel <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                  data = coyote_travel, family=binomial(link="logit")) 
+```
+
+```{r}
+# Rank models 
+rank_full <-model.sel(full_mod, anthro_full, nat_full)
+rank_day <-model.sel(anthro_day, nat_day)
+rank_night <-model.sel(anthro_night, nat_night)
+rank_rest <- model.sel(anthro_rest, nat_rest)
+rank_forage <- model.sel(anthro_forage, nat_forage)
+rank_travel <- model.sel(anthro_travel, nat_travel)
+# Get top mods
+list(rank_full, rank_day, rank_night, 
+             rank_rest, rank_forage, rank_travel) %>% 
+  map_df(., function(x){subset(x, delta <=2)[1, 0] %>% rownames_to_column()})
+
+#Natural features come out on top every time, even when removing cropland or hunter risk from anthro models
+```
+
+```{r}
+#full models
+anthro_full <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + (1|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+nat_full <- glmer(Used ~ tri + veg + lion_risk + (1|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+#daynight models
+anthro_daynight <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + daynight + (1 + daynight|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+nat_daynight <- glmer(Used ~ tri + veg + lion_risk + (1|ID) + daynight + (1 + daynight|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+#behavior models
+anthro_behavior <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + states + (1 + states|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+nat_behavior <- glmer(Used ~ tri + veg + lion_risk + states + (1 + states|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+#both daynight and behavior
+anthro_both <- glmer(Used ~ road_dist + dev_dist + crop_dist + hunter_risk + 
+                       daynight + states + (1 + daynight|ID + states|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+nat_both <- glmer(Used ~ tri + veg + lion_risk + daynight + states +(1 + daynight|ID + states|ID), 
+                      data = coyote_full, family=binomial(link="logit")) 
+
+model.sel(list(global, anthro_full, nat_full, 
+               anthro_daynight, nat_daynight, 
+               anthro_behavior, nat_behavior, 
+               anthro_both, nat_both))
+
+subset(., delta <2)
+
+
+
+```
+
+```{r}
+model.sel(full_mod, anthro_full, nat_full)
+```
+
