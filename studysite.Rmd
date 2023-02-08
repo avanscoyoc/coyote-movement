@@ -1,0 +1,66 @@
+---
+title: "1a_coyote_homeranges"
+author: "Amy Van Scoyoc"
+date: "1/26/2023"
+output: html_document
+---
+
+```{r message=FALSE,warning=FALSE}
+library(here) #reproducible working directory
+library(tidyverse) #data wrangling
+library(sf) #for spatial transformations with pipes
+library(adehabitatHR) #for calculating homerange KUDs
+library(tmap) #for homerange figure
+```
+
+```{r}
+#import dataset
+load(here("data_objects","coyote.Rdata"))
+```
+
+```{r}
+#create object for calculating HRs
+coyote_sp <- coyote %>% 
+   dplyr::select(ID,x,y) %>% #select data 
+   st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
+   st_transform("+init=epsg:26910") %>% #transform back to UTMs
+   as("Spatial") #transform back to sp object for KUDs
+
+#create Kernel Utilization Distributions 
+kud_all <- adehabitatHR::kernelUD(coyote_sp, h = 'href')
+coyote_hr <- adehabitatHR::getverticeshr(kud_all, percent = 95) %>% 
+              st_as_sf() %>% #make an sf object for tmap plot
+              st_transform("+init=epsg:4326") %>% #transform back to WGS84 for plot
+              st_make_valid() %>% mutate(`Coyote ID` = id)
+```
+
+```{r}
+#library(OpenStreetMap)
+
+tmap_mode("plot")
+
+c_osm <- tmaptools::read_osm(st_bbox(coyote_hr), ext = 1.4)
+
+tm_shape(c_osm) +
+  tm_rgb() +
+  #tm_basemap(leaflet::providers$OpenTopoMap) +
+  tm_shape(coyote_hr) + 
+  tm_polygons(col = "Coyote ID", alpha = 0.3) +
+ #tm_tiles(paste0("http://services.arcgisonline.com/arcgis/rest/services/Canvas/",
+ #  "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"), group = "Labels") +
+  tm_scale_bar() +
+  tm_layout(legend.position = c("left", "bottom")) 
+```
+
+```{r}
+tmap_mode("view")
+
+  tm_basemap(leaflet::providers$OSM) +
+  tm_shape(coyote_hr) + 
+  tm_polygons(col = "Coyote ID", alpha = 0.3) +
+  #tm_tiles(paste0("http://services.arcgisonline.com/arcgis/rest/services/Canvas/",
+   # "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"), group = "Labels") +
+  tm_scale_bar() +
+  tm_layout(legend.position = c("left", "bottom"))
+```
+

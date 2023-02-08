@@ -95,7 +95,28 @@ coyote_full$ID <- as_factor(coyote_full$ID) #make sure ID is treated as a factor
 
 coyote_cor <- coyote_full
 st_geometry(coyote_cor) <- NULL
-cor(coyote_cor[,7:13])
+
+#check correlation of binary and non-binary  
+full_cor <- coyote_cor %>% 
+             rowid_to_column() %>% 
+             mutate(veg_val = 1) %>% 
+             pivot_wider(names_from = veg, values_from = veg_val, values_fill = 0) %>% 
+             dplyr::select(-"NA") 
+cor(full_cor[,7:17])
+
+library(kableExtra)
+full_cor[,9:17] %>% 
+  set_names("Ruggedness", "Development", "Road", 
+            "Agriculture", "Lethal Removal Risk", 
+            "Mountain Lion Risk", "Grassland", 
+            "Shrubland", "Woodland") %>% 
+  cor() %>% 
+  knitr::kable() %>% 
+  kable_styling("striped", full_width = FALSE, htmltable_class = 'lightable-classic-2') %>% 
+  kable_paper() %>% 
+  save_kable(file = 'covariate_correlations.png') 
+
+knitr::kable(cor(full_cor[,7:17]))
 #remove elevation in full model (correlated w/ crop)
 ```
 
