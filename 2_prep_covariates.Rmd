@@ -69,7 +69,7 @@ road <- reclassify(lc, road_vec)
 crop <- reclassify(lc, crop_vec)
 veg <- reclassify(lc, veg_vec)
 
-#convert vegetation raster to categorical values
+#convert vegetation raster to categorical values (For lions)
 type <- data.frame(ID=1:3, cover=c("Shrubland", "Woodland", "Grassland"))
 levels(veg) <- type
 ```
@@ -79,27 +79,6 @@ levels(veg) <- type
 dev_dist <- gridDistance(dev, origin = 1)
 road_dist <- gridDistance(road, origin = 1)
 crop_dist <- gridDistance(crop, origin = 1)
-```
-
-### Plot layers
-```{r}
-tmlayer <- function(layer,title){
-  tm_shape(layer) + 
-    tm_raster(style = "cont", palette = "seq") +
-  tm_layout(aes.palette = list(seq = "-YlOrRd")) +
-  tm_shape(hopland) + 
-    tm_borders(col = "blue") + 
-    tm_layout(legend.show = T, panel.show=T, panel.labels=title,
-              legend.outside = T, title.position=c("center","bottom")) 
-}
-
-tmap_arrange(
-  tmlayer(elev, "Elevation"),
-  tmlayer(tri, "Ruggedness"),
-  tmlayer(veg, "Vegetation type"),
-  tmlayer(dev_dist, "Distance to development"),
-  tmlayer(road_dist, "Distance to roads"), 
-  tmlayer(crop_dist, "Distance to crops"), ncol = 3)
 ```
 
 ### Hunter risk layer
@@ -185,13 +164,15 @@ plot(hunter_risk)
 
 ```{r}
 #crop to hopland boundary to see if its accurate
-hrec_crop <- crop(hunter_risk, extent(hopland))
-hrec_hunter_risk <- mask(hrec_crop, st_zm(hopland))
-
-hunter <- tm_shape(hrec_hunter_risk) + 
-            tm_raster(style = "cont", palette = "Blues") + 
-            tm_shape(hopland) + tm_borders(col = "black") + 
-            tm_layout(legend.show = T, panel.show=T, panel.labels="HREC Hunter Risk")
+# hrec_crop <- crop(hunter_risk, extent(hopland))
+# hrec_hunter_risk <- mask(hrec_crop, st_zm(hopland))
+# 
+hunter <- tm_shape(hunt_rsf) + tm_raster(style = "quantile") +
+  tm_layout(aes.palette = list(seq = "YlOrRd"),
+            legend.show = T, panel.show=T,
+            panel.labels="Lethal Removal Risk", panel.label.size = 1,
+            legend.title.color = "white", legend.outside = T,
+            title.position=c("center","bottom"))
 ```
 
 
@@ -268,19 +249,19 @@ plot(lion_risk)
 ```
 
 ```{r}
-#crop to hopland boundary to see if its accurate
-lion_crop <- crop(lion_risk, extent(hopland))
-hrec_lion_risk <- mask(lion_crop, st_zm(hopland))
-
-lion <- tm_shape(hrec_lion_risk) + 
-          tm_raster(style = "cont", palette = "YlOrRd") + 
-          tm_shape(hopland) + tm_borders(col = "black") + 
-          tm_layout(legend.show = T, panel.show=T, panel.labels="HREC Lion Risk")
+# #crop to hopland boundary to see if its accurate
+# lion_crop <- crop(lion_risk, extent(hopland))
+# hrec_lion_risk <- mask(lion_crop, st_zm(hopland))
+# 
+# lion <- tm_shape(hrec_lion_risk) + 
+#           tm_raster(style = "cont", palette = "YlOrRd") + 
+#           tm_shape(hopland) + tm_borders(col = "black") + 
+#           tm_layout(legend.show = T, panel.show=T, panel.labels="HREC Lion Risk")
 ```
 
 ### HREC plots
 ```{r}
-tmap_arrange(hunter, lion)
+# tmap_arrange(hunter, lion)
 ```
 
 
@@ -305,13 +286,12 @@ tmlayer <- function(layer,title, color){
 
 tmap_arrange(
   tmlayer(envt[[2]], "Ruggedness", "Spectral"),
-  tmlayer(envt[[3]], "Vegetation type", "Dark2"),
   tmlayer(envt[[8]], "Mountain Lion Risk", "YlOrRd"),
   tmlayer(envt[[4]], "Development Dist.", "-YlOrRd"),
   tmlayer(envt[[5]], "Road Dist.", "-YlOrRd"), 
-  tmlayer(envt[[6]], "Agriculture Dist.", "-YlGn"), ncol = 3)
-
-tmlayer(envt[[7]], "Lethal Removal Risk", "-YlOrRd")
-plot(envt[[7]])
+  tmlayer(envt[[6]], "Agriculture Dist.", "-YlGn"), 
+  hunter, 
+  tmlayer(envt[[3]], "Vegetation type", "Dark2"), ncol = 3) %>% 
+  tmap_save('figs/Figure_S1.png')
 ```
 

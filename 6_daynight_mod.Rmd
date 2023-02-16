@@ -114,7 +114,7 @@ kernel.area(kud_all, percent = 95) %>%
 ### Sample available points in Home Ranges
 ```{r}
 coyote_night <- coyote %>% 
-  filter(daynight == 0) %>% #filter to day only
+  filter(daynight == 0) %>% #filter to night only
   mutate(Used = 1) %>% #add column to indicate used points
    st_as_sf(., coords = c("x","y"), crs = "+init=epsg:4326") %>%  #make spatial object
    st_transform("+init=epsg:26910")  #transform back to UTMs
@@ -153,48 +153,60 @@ coyote_night <- availables %>%
 # Check that we have a 5:1 ratio of used:available points
 table(coyote_night$ID,coyote_night$Used)
 ```
+
 ```{r}
 # Save data objects
 save(coyote_day, file = "data_objects/coyote_day.Rdata")
 save(coyote_night, file = "data_objects/coyote_night.Rdata")
 ```
 
-
-
 ### DayNight Mods
 ```{r}
 #import best full model 
 load(here("data_objects","full_mod.Rdata"))
 
-day_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
+day_mod <- glmer(Used ~ tri + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_day, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-night_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
+night_mod <- glmer(Used ~ tri + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_night, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
-model_performance(full_mod)
-model_performance(day_mod)
-model_performance(night_mod)
-```
-
-```{r}
 save(day_mod, file = "data_objects/day_mod.Rdata")
 save(night_mod, file = "data_objects/night_mod.Rdata")
 ```
-
 
 ```{r}
 #Best model
 jtools::plot_summs(full_mod, day_mod, night_mod, scale = TRUE, 
            model.names = c("Full", "Day", "Night"),
            coefs = c("Ruggedness" = "tri",
-                     "Shrubland" = "vegShrub",
-                     "Woodland" = "vegWoodland",
-                     "Road Dist" = "road_dist",
+                     "Road Dist." = "road_dist",
                      "Development Dist." = "dev_dist", 
                      "Agriculture Dist." = "crop_dist",
                      "Lethal Removal Risk" = "hunter_risk",
                      "Mountain Lion Risk" = "lion_risk"),
            colors = c("black","red","purple")) 
+ggsave('figs/Figure_4.png') 
 ```
 
+### Vegetation Daynight model
+```{r}
+day_veg <- glmer(Used ~ veg + (1|ID), data = coyote_day, family=binomial(link="logit")) 
+night_veg <- glmer(Used ~ veg + (1|ID), data = coyote_night, family=binomial(link="logit")) 
+
+save(day_veg, file = "data_objects/day_veg.Rdata")
+save(night_veg, file = "data_objects/night_veg.Rdata")
+```
+
+```{r}
+#import full veg model 
+load(here("data_objects","full_veg.Rdata"))
+
+#Best model
+jtools::plot_summs(full_veg, day_veg, night_veg, scale = TRUE, 
+           model.names = c("Full", "Day", "Night"),
+           coefs = c("Shrubland" = "vegShrubland",
+                     "Woodland" = "vegWoodland"),
+           colors = c("black","red","purple")) 
+ggsave('figs/Figure_S4.png')
+```

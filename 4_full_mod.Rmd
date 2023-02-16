@@ -10,6 +10,8 @@ library(here) #reproducible working directory
 library(tidyverse) #data wrangling
 library(sp) #for spatial points
 library(sf) #for spatial transformations with pipes
+library(lubridate) #setting timezone
+library(maptools) #setting day/night times
 library(adehabitatHR) #for calculating homerange KUDs
 library(raster) #for importing and extracting covariates
 library(lme4) #for glmer models
@@ -18,9 +20,30 @@ library(jtools) #plot estimates
 library(sjPlot)
 ```
 
+### Load coyote data with HMM states, add day/night
+
 ```{r}
 #import dataset
-load(here("data_objects","coyote.Rdata"))
+coyote <- read_csv(here("data", "hmm_dat.csv"))
+#transform to geographic crs for sunriset
+coordinates(coyote) <- c("x", "y")
+proj4string(coyote) <- CRS("+init=epsg:26910")
+coyote <- spTransform(coyote, CRS("+init=epsg:4326")) %>% as.data.frame() 
+#add sunriset times
+coyote <- coyote %>% 
+  mutate(t = force_tz(t,tz = "America/Los_Angeles"), #declare timezone
+         sunrise = sunriset(SpatialPoints(cbind(x,y),proj4string=CRS("+init=epsg:4326")), 
+                                      t, direction="sunrise", POSIXct.out=TRUE)[,2],
+         sunset = sunriset(SpatialPoints(cbind(x,y),proj4string=CRS("+init=epsg:4326")), 
+                                      t, direction="sunset", POSIXct.out=TRUE)[,2],
+         daynight = ifelse(t > sunrise & t < sunset, 1, 0), #assign tags, 1=day, 0=night 
+         sex = ifelse(grepl("^F",ID),"female","male")) %>% 
+  dplyr::select(ID, x, y, t, states, daynight, sex)
+
+save(coyote, file = "data_objects/coyote.Rdata")
+```
+
+```{r}
 #import covariates
 load(here("data_objects","envt.Rdata"))
 ```
@@ -102,39 +125,35 @@ full_cor <- coyote_cor %>%
              mutate(veg_val = 1) %>% 
              pivot_wider(names_from = veg, values_from = veg_val, values_fill = 0) %>% 
              dplyr::select(-"NA") 
-cor(full_cor[,7:17])
+cor(full_cor[,9:17])
+
+#remove elevation (correlated w/ crop)
+#remove shrubland  (correlated w/ lion risk)
 
 library(kableExtra)
-full_cor[,9:17] %>% 
+full_cor[,c(9:17)] %>% 
   set_names("Ruggedness", "Development", "Road", 
             "Agriculture", "Lethal Removal Risk", 
-            "Mountain Lion Risk", "Grassland", 
-            "Shrubland", "Woodland") %>% 
+            "Mountain Lion Risk", "Grassland", "Shrubland", "Woodland") %>% 
   cor() %>% 
   knitr::kable() %>% 
   kable_styling("striped", full_width = FALSE, htmltable_class = 'lightable-classic-2') %>% 
   kable_paper() %>% 
-  save_kable(file = 'covariate_correlations.png') 
-
-knitr::kable(cor(full_cor[,7:17]))
-#remove elevation in full model (correlated w/ crop)
+  save_kable(file = 'figs/Table_S1.png') 
 ```
 
 ###Full models 
 ```{r}
-full_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
+full_mod <- glmer(Used ~ tri + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
                   data = coyote_full, family=binomial(link="logit")) #drop elev (correlated w/ crop)
 
 save(full_mod, file = "data_objects/full_mod.Rdata")
-summary(full_mod)
 ```
 
-
+###Vegetation full model
 ```{r}
-likelihoods <- c(93648.15, 96632.17, 93648.15, 94169.25, 96632.17, 93648.15, 96632.17, 94169.25, 93648.15, 93648.15, 96632.17, 93648.15, 93648.15, 93648.15, 96632.17, 96632.17, 93648.15, 93648.15, 94169.25, 93648.15, 93648.15, 93648.15, 93648.15, 93648.15, 93650.15)
-
-max(likelihoods)
-mean(likelihoods)
-sd(likelihoods)
+full_veg <- glmer(Used ~ veg + (1|ID), data = coyote_full, family=binomial(link="logit")) 
+save(full_veg, file = "data_objects/full_veg.Rdata")
 ```
+
 

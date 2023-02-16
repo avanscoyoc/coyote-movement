@@ -222,46 +222,58 @@ table(coyote_travel$ID,coyote_travel$Used)
 
 
 ### Behavior Mods
-
-
 ```{r}
-#import best full model 
-load(here("data_objects","full_mod.Rdata"))
+rest_mod <- glmer(Used ~ tri + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
+                  data = coyote_rest, family=binomial(link="logit")) #drop elev & shrubland correlated...
 
-rest_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
-                  data = coyote_rest, family=binomial(link="logit")) #drop elev (correlated w/ crop)
+forage_mod <- glmer(Used ~ tri + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
+                  data = coyote_forage, family=binomial(link="logit")) #drop elev & shrubland correlated...
 
-forage_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
-                  data = coyote_forage, family=binomial(link="logit")) #drop elev (correlated w/ crop)
+travel_mod <- glmer(Used ~ tri + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
+                  data = coyote_travel, family=binomial(link="logit")) #drop elev & shrubland correlated...
 
-travel_mod <- glmer(Used ~ tri + veg + road_dist + dev_dist + crop_dist + hunter_risk + lion_risk + (1|ID), 
-                  data = coyote_travel, family=binomial(link="logit")) #drop elev (correlated w/ crop)
-summary(travel_mod)
-model_performance(full_mod)
-model_performance(rest_mod)
-model_performance(forage_mod)
-model_performance(travel_mod)
-```
-
-```{r}
 save(rest_mod, file = "data_objects/rest_mod.Rdata")
 save(forage_mod, file = "data_objects/forage_mod.Rdata")
 save(travel_mod, file = "data_objects/travel_mod.Rdata")
 ```
 
-
-
 ```{r}
+#import best full model 
+load(here("data_objects","full_mod.Rdata"))
+
 #Best model
 jtools::plot_summs(full_mod, rest_mod, forage_mod, travel_mod, scale = TRUE, 
            model.names = c("Full", "Resting", "Foraging", "Traveling"),
            coefs = c("Ruggedness" = "tri",
-                     "Shrubland" = "vegShrub",
-                     "Woodland" = "vegWoodland",
                      "Road Dist." = "road_dist",
                      "Development Dist." = "dev_dist", 
                      "Agriculture Dist" = "crop_dist",
                      "Lethal Removal Risk" = "hunter_risk",
                      "Mountain Lion Risk" = "lion_risk"),
-           colors = c("black","#CC9900","#339999","#006633")) 
+           colors = c("black","#CC9900","#339999","#006633"))
+ggsave('figs/Figure_3.png') 
+```
+
+### Vegetation Behavior model
+```{r}
+rest_veg <- glmer(Used ~ veg + (1|ID), data = coyote_rest, family=binomial(link="logit")) 
+forage_veg <- glmer(Used ~ veg + (1|ID), data = coyote_forage, family=binomial(link="logit")) 
+travel_veg <- glmer(Used ~ veg + (1|ID), data = coyote_travel, family=binomial(link="logit")) 
+
+save(rest_veg, file = "data_objects/rest_veg.Rdata")
+save(forage_veg, file = "data_objects/forage_veg.Rdata")
+save(travel_veg, file = "data_objects/travel_veg.Rdata")
+```
+
+```{r}
+#import full veg model 
+load(here("data_objects","full_veg.Rdata"))
+
+#Best model
+jtools::plot_summs(full_veg, rest_veg, forage_veg, travel_veg, scale = TRUE, 
+           model.names = c("Full", "Resting", "Foraging", "Traveling"),
+           coefs = c("Shrubland" = "vegShrubland",
+                     "Woodland" = "vegWoodland"),
+           colors = c("black","#CC9900","#339999","#006633"))
+ggsave('figs/Figure_S3.png')
 ```

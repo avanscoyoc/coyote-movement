@@ -28,8 +28,14 @@ season1 <- read_csv(here("data", "coyote_2020.11.08_2021.06.30.csv")) %>% mutate
 #season 2 data (16-weeks)
 season2 <- read_csv(here("data", "coyote_2021.12.01_2022.03.04.csv")) %>% mutate(season = 2)
 
+#season 3 data (10.5-weeks)
+season3 <- read_csv(here("data", "coyote_2022.11.27_2023.02.10.csv")) %>% mutate(season = 3)
+
+#fix column names
+names(season3)=names(season2)
+
 #combine field seasons
-dat_all <- rbind(season1, season2) %>% 
+dat_all <- rbind(season1, season2) %>% rbind(season3) %>% 
   dplyr::select(x = `Longitude[deg]`, y = `Latitude[deg]`, 
                 t = `Acq. Time [UTC]`, collar_id = `Collar ID`, season) %>%
   mutate(t = lubridate::with_tz(ymd_hms(t,tz="UTC"),"America/Los_Angeles")) %>% #adjust time
@@ -40,7 +46,7 @@ dat_all <- rbind(season1, season2) %>%
 ```
 ### Calculate GPS data metrics
 
-There were hourly GPS locations for a total of 190 unique days (mean 60 days per individual) from November to May of 2020-2021 and 2021-2022. 
+There were hourly GPS locations for a total of 190 unique days (mean 60 days per individual) from November to May of 2020-2021 and 2021-2022. For three seaons of data there were 265 unique days (mean 60 days per individual).
 ```{r}
 #calculate number of collared coyote dates (190 unique days)
 dat_all %>% 
@@ -81,6 +87,4 @@ dat_all <- dat_all %>%
   data.frame() #convert to dataframe
 
 save(dat_all, file = "data_objects/dat_all.Rdata") #save object
-
-head(dat_all)
 ```

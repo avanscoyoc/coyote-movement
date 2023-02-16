@@ -56,7 +56,7 @@ allPar0 <- lapply(as.list(1:niter), function(x) {
                      min = c(25, 250, 500),
                      max = c(50, 500, 1500)) 
     # Zero mass parameters 
-    zeromass <- c(0.0005458941,0.0005458941,0.0005458941)
+    zeromass <- c(0.002356343,0.002356343,0.002356343)
     # Turning angle mean
     angleMean0 <- c(pi, pi/2, 0)
     # Turning angle concentration
@@ -82,6 +82,16 @@ allm_parallel <- parLapply(cl = cl, X = allPar0, fun = function(par0) {
 allnllk <- unlist(lapply(allm_parallel, function(m) m$mod$minimum))
 allnllk
 ```
+ 
+```{r}
+#get stats for likelihoods
+likelihoods <- c(148653., 152963.6, 148653.3, 148653.3, 152963.6, 147916.6, 152963.6, 148653.3, 147916.6, 152963.6,152963.6, 147916.6, 148653.3, 147916.6, 152963.6, 152963.6, 147916.6, 148653.3, 152963.6, 148653.3,147916.6, 147916.6, 147916.6, 147916.6, 148653.3)
+
+max(likelihoods)
+mean(likelihoods)
+sd(likelihoods)
+```
+
 
 ```{r}
 # Index of best fitting model (smallest negative log-likelihood)
@@ -105,13 +115,6 @@ write_csv(hmm_dat, "data/hmm_dat.csv")
 ```{r}
 hmm_dat <- read_csv("data/hmm_dat.csv")
 hmm_dat %>% group_by(states) %>% summarize(Observations = n())
-obs_table <- data_frame(c("Resting", "Foraging", "Traveling", "Combined"),
-                        c(4788,3641,3164,11593), 
-                        c(4788*5,3641*5,3164*5,11593*5))
-names(obs_table) <- c('Model', 'Observations', 'Available')
-
-tab_df(obs_table)
-
 ```
 
 ```{r}
@@ -152,5 +155,6 @@ ggplot(activity, aes(x = hour, y = n, group = states, fill = factor(states))) +
     scale_fill_manual(labels = c("Resting", "Foraging", "Traveling"), 
                       values = c("#E7B800", "#00afbb", "seagreen")) +
     labs(x = "Time of Day", y = "Frequency", fill = "") +
-    theme_bw()
+    theme_bw() 
+ggsave('figs/Figure_2.png')
 ```
