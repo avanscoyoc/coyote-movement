@@ -7,8 +7,9 @@ output: html_document
 
 ### Import Libraries
 ```{r}
-library(kableExtra)
-library(MuMIn)
+library(here) #reproducibly load data 
+library(kableExtra) #make basic tables
+library(webshot) #make model tables
 ```
 
 ### Used vs. Available table
@@ -50,8 +51,11 @@ sjPlot::tab_model(full_mod, rest_mod, forage_mod, travel_mod, day_mod, night_mod
                           "Development distance", "Agriculture distance",
                           "Lethal Removal Risk", "Mountain Lion Risk"),
           show.re.var = FALSE, show.ngroups = FALSE, show.icc = FALSE,
-          string.pred = "Covariates", string.ci = "CI", p.style = "stars")
-ggsave('figs/Table_S4.png')
+          string.pred = "Covariates", string.ci = "CI", p.style = "stars",
+          file = "figs/Table_S4.html")
+
+# then take html file and make .png file
+webshot("figs/Table_S4.html", "figs/Table_S4.png")
 ```
 
 ### Veg model table 
@@ -67,6 +71,9 @@ sjPlot::tab_model(full_veg, rest_veg, forage_veg, travel_veg, day_veg, night_veg
           dv.labels = c("Full model","Rest","Forage","Travel", "Day", "Night"),
           pred.labels = c("Intercept", "Shrubland", "Woodland"),
           show.re.var = FALSE, show.ngroups = FALSE, show.icc = FALSE,
-          string.pred = "Covariates", string.ci = "CI", p.style = "stars") 
-ggsave('figs/Table_S5.png')
+          string.pred = "Covariates", string.ci = "CI", p.style = "stars", 
+          file = "figs/Table_S5.html")
+
+# then take html file and make .png file
+webshot("figs/Table_S5.html", "figs/Table_S5.png")
 ```
