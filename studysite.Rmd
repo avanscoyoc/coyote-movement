@@ -41,15 +41,27 @@ tmap_mode("plot")
 
 c_osm <- tmaptools::read_osm(st_bbox(coyote_hr), ext = 1.4)
 
-tm_shape(c_osm) +
-  tm_rgb() +
-  #tm_basemap(leaflet::providers$OpenTopoMap) +
-  tm_shape(coyote_hr) + 
-  tm_polygons(col = "Coyote ID", alpha = 0.3) +
- #tm_tiles(paste0("http://services.arcgisonline.com/arcgis/rest/services/Canvas/",
- #  "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"), group = "Labels") +
-  tm_scale_bar() +
-  tm_layout(legend.position = c("left", "bottom")) 
+male <- tm_shape(c_osm) +
+          tm_rgb() +
+          #tm_basemap(leaflet::providers$OpenTopoMap) +
+          tm_shape(filter(coyote_hr, grepl("M",id))) + 
+          tm_polygons(col = "Coyote ID", alpha = 0.3) +
+         #tm_tiles(paste0("http://services.arcgisonline.com/arcgis/rest/services/Canvas/",
+         #  "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"), group = "Labels") +
+          tm_scale_bar() +
+          tm_layout(legend.position = c("left", "bottom")) 
+
+female <- tm_shape(c_osm) +
+          tm_rgb() +
+          #tm_basemap(leaflet::providers$OpenTopoMap) +
+          tm_shape(filter(coyote_hr, grepl("F",id))) + 
+          tm_polygons(col = "Coyote ID", alpha = 0.3) +
+         #tm_tiles(paste0("http://services.arcgisonline.com/arcgis/rest/services/Canvas/",
+         #  "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"), group = "Labels") +
+          tm_scale_bar() +
+          tm_layout(legend.position = c("left", "bottom")) 
+
+tmap_arrange(male, female)
 ```
 
 ```{r}
