@@ -116,6 +116,45 @@ write_csv(hmm_dat, "data/hmm_dat.csv")
 hmm_dat <- read_csv("data/hmm_dat.csv")
 hmm_dat %>% group_by(states) %>% summarize(Observations = n())
 ```
+```{r}
+activity <- hmm_dat %>% 
+  left_join(datekey, by = "ID") %>% #add season to check variation 
+  dplyr::select(1:7, season) %>% #drop unnecessary columns
+  group_by(season, ID, states) %>% 
+  summarize(state_total = n()) %>% 
+  ungroup() %>% 
+  group_by(ID) %>% 
+  mutate(total = sum(state_total), 
+         percent = state_total / total * 100)
+
+aov_rest <- aov(percent ~ as.factor(season), data = filter(activity, states == 1))
+aov_forage <- aov(percent ~ as.factor(season), data = filter(activity, states == 2))
+aov_travel <- aov(percent ~ as.factor(season), data = filter(activity, states == 3))
+
+summary(aov_rest)   # significantly different
+summary(aov_forage) # no difference
+summary(aov_travel) # no difference
+
+TukeyHSD(aov_rest) #3rd season % resting was significantly higher than seasons 1 and 2
+
+ssn_act_plot <- hmm_dat %>% 
+  left_join(datekey, by = "ID") %>% #add season to check variation 
+  dplyr::select(1:7, season) %>% #drop unnecessary columnshmm_dat %>% 
+  mutate(hour = hour(t)) %>% 
+  group_by(season, ID, states, hour) %>% 
+  summarize(n = n())
+
+ggplot(ssn_act_plot, aes(x = hour, y = n, group = states, fill = factor(states))) +
+    coord_polar(theta = "x", start = -.13) +
+    geom_bar(stat = "identity") +
+    #geom_hline(yintercept = seq(0, 500, by = 100), color = "grey80", size = 0.3) +
+    scale_x_continuous(breaks = 0:24, expand = c(.002,0)) +
+    scale_fill_manual(labels = c("Resting", "Foraging", "Traveling"), 
+                      values = c("#E7B800", "#00afbb", "seagreen")) +
+    labs(x = "Time of Day", y = "Frequency", fill = "") +
+    theme_bw() +
+    facet_wrap( ~ season, ncol=3)
+```
 
 ```{r}
 activity <- hmm_dat %>% 
